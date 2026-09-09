@@ -1,84 +1,52 @@
-import { useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
+import { api, ApiError, Post, User } from './api';
 
 type Section = 'home' | 'search' | 'create' | 'earn' | 'wallet' | 'profile';
-
 const sections: Array<{ id: Section; label: string; icon: string }> = [
-  { id: 'home', label: 'Home', icon: '⌂' },
-  { id: 'search', label: 'Search', icon: '⌕' },
-  { id: 'create', label: 'Create', icon: '+' },
-  { id: 'earn', label: 'Earn', icon: '◇' },
-  { id: 'wallet', label: 'Wallet', icon: '◫' },
-  { id: 'profile', label: 'Profile', icon: '○' },
+  { id: 'home', label: 'Home', icon: '⌂' }, { id: 'search', label: 'Search', icon: '⌕' },
+  { id: 'create', label: 'Create', icon: '+' }, { id: 'earn', label: 'Earn', icon: '◇' },
+  { id: 'wallet', label: 'Wallet', icon: '◫' }, { id: 'profile', label: 'Profile', icon: '○' },
 ];
 
 function App() {
   const [section, setSection] = useState<Section>('home');
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  return (
-    <div className="app-shell">
-      <header className="topbar">
-        <div className="brand">Sphere</div>
-        <div className="topbar-actions">
-          <button aria-label="Notifications">♡</button>
-          <button aria-label="Messages">✉</button>
-        </div>
-      </header>
+  useEffect(() => { api.session().then(r => setUser(r.user)).catch(() => setUser(null)).finally(() => setLoading(false)); }, []);
+  if (loading) return <div className="app-shell"><div className="loading">Loading Sphere…</div></div>;
+  if (!user) return <Auth onAuthenticated={setUser} />;
 
-      <main className="content">
-        {section === 'home' && <Home />}
-        {section === 'search' && <Panel title="Search" text="Search people, posts and topics." />}
-        {section === 'create' && <Panel title="Create" text="Your image post composer will connect to the Worker API here." />}
-        {section === 'earn' && <Panel title="Earn" text="Reward providers are not configured yet. No fake offers or balances are shown." />}
-        {section === 'wallet' && <Panel title="Wallet" text="Your server-authoritative wallet and transaction history will appear here." />}
-        {section === 'profile' && <Panel title="Profile" text="Authenticated profile data will be loaded from D1." />}
-      </main>
-
-      <nav className="bottom-nav" aria-label="Primary navigation">
-        {sections.map((item) => (
-          <button key={item.id} className={section === item.id ? 'active' : ''} onClick={() => setSection(item.id)}>
-            <span className="nav-icon">{item.icon}</span>
-            <span>{item.label}</span>
-          </button>
-        ))}
-      </nav>
-    </div>
-  );
+  return <div className="app-shell">
+    <header className="topbar"><div className="brand">Sphere</div><div className="topbar-actions"><button aria-label="Notifications" onClick={() => setSection('profile')}>♡</button><button aria-label="Messages">✉</button></div></header>
+    <main className="content">
+      {section === 'home' && <Home />}{section === 'search' && <Search />}{section === 'create' && <Create onCreated={() => setSection('home')} />}
+      {section === 'earn' && <Earn />}{section === 'wallet' && <Wallet />}{section === 'profile' && <Profile user={user} onLogout={() => { api.logout().finally(() => setUser(null)); }} onUpdated={setUser} />}
+    </main>
+    <nav className="bottom-nav" aria-label="Primary navigation">{sections.map(item => <button key={item.id} className={section === item.id ? 'active' : ''} onClick={() => setSection(item.id)}><span className="nav-icon">{item.icon}</span><span>{item.label}</span></button>)}</nav>
+  </div>;
 }
 
-function Home() {
-  return (
-    <section>
-      <div className="section-heading">
-        <div>
-          <p className="eyebrow">Social</p>
-          <h1>For you</h1>
-        </div>
-        <button className="quiet-button">Following</button>
-      </div>
-      <div className="empty-state">
-        <div className="empty-mark">S</div>
-        <h2>Your feed starts here</h2>
-        <p>Connect the API and persistent D1 data to load real posts. Nothing in this screen is mocked.</p>
-      </div>
-    </section>
-  );
+function Auth({ onAuthenticated }: { onAuthenticated: (u: User) => void }) {
+  const [mode, setMode] = useState<'login'|'signup'>('login'); const [username,setUsername]=useState(''); const [email,setEmail]=useState(''); const [password,setPassword]=useState(''); const [error,setError]=useState(''); const [busy,setBusy]=useState(false);
+  async function submit(e:FormEvent){e.preventDefault();setBusy(true);setError('');try{const r=mode==='login'?await api.login({email,username:email?undefined:username,password}):await api.signup({username,email,password});onAuthenticated(r.user);}catch(e){setError(e instanceof ApiError?e.message:'Unable to connect to Sphere.')}finally{setBusy(false)}}
+  return <div className="auth-shell"><div className="auth-card"><div className="brand">Sphere</div><p className="eyebrow">Social + rewards</p><h1>{mode==='login'?'Welcome back':'Create your account'}</h1><p className="muted">Your account and activity are stored on Sphere's production backend.</p><form onSubmit={submit}>{mode==='signup'&&<label>Username<input value={username} onChange={e=>setUsername(e.target.value)} autoComplete="username" required minLength={3}/></label>}<label>{mode==='login'?'Email or username':'Email'}<input value={email} onChange={e=>setEmail(e.target.value)} autoComplete={mode==='login'?'username':'email'} required/></label><label>Password<input type="password" value={password} onChange={e=>setPassword(e.target.value)} autoComplete={mode==='login'?'current-password':'new-password'} required minLength={8}/></label>{error&&<div className="error">{error}</div>}<button className="primary" disabled={busy}>{busy?'Working…':mode==='login'?'Log in':'Create account'}</button></form><button className="text-button" onClick={()=>{setMode(mode==='login'?'signup':'login');setError('')}}>{mode==='login'?'Need an account? Sign up':'Already have an account? Log in'}</button></div></div>;
 }
 
-function Panel({ title, text }: { title: string; text: string }) {
-  return (
-    <section>
-      <div className="section-heading">
-        <div>
-          <p className="eyebrow">Sphere</p>
-          <h1>{title}</h1>
-        </div>
-      </div>
-      <div className="empty-state compact">
-        <h2>Ready for backend wiring</h2>
-        <p>{text}</p>
-      </div>
-    </section>
-  );
-}
+function Home(){const [posts,setPosts]=useState<Post[]>([]);const [loading,setLoading]=useState(true);const [error,setError]=useState('');useEffect(()=>{api.posts().then(r=>setPosts(r.posts)).catch(e=>setError(e instanceof Error?e.message:'Unable to load feed')).finally(()=>setLoading(false))},[]);return <section><div className="section-heading"><div><p className="eyebrow">Social</p><h1>For you</h1></div><button className="quiet-button">Following</button></div>{loading&&<div className="empty-state compact"><h2>Loading feed</h2></div>}{error&&<div className="error-block">{error}</div>}{!loading&&!error&&!posts.length&&<div className="empty-state"><div className="empty-mark">S</div><h2>Your feed starts here</h2><p>There are no posts available yet. Create the first image post or follow people to build your feed.</p></div>}<div className="feed">{posts.map(p=><PostCard key={p.id||p.post_id} post={p}/>)}</div></section>}
+
+function PostCard({post}:{post:Post}){const [liked,setLiked]=useState(false);const [saved,setSaved]=useState(false);const [busy,setBusy]=useState(false);const media=post.media||{};const key=media.object_key||media.key||media.r2_key||media.storage_key;const image=key?`${apiBase()}/media/${encodeURIComponent(key)}`:media.url||media.public_url;async function act(fn:()=>Promise<{liked?:boolean;saved?:boolean}>,kind:'like'|'save'){if(busy)return;setBusy(true);try{const r=await fn();kind==='like'?setLiked(Boolean(r.liked)):setSaved(Boolean(r.saved));}finally{setBusy(false)}}return <article className="post-card">{image?<img className="post-image" src={image} alt="Sphere post"/>:<div className="media-placeholder">Image unavailable</div>}<div className="post-body"><div className="post-author"><div className="avatar">{post.author?.username?.[0]?.toUpperCase()||'S'}</div><div><strong>@{post.author?.username||'sphere_user'}</strong><div className="muted">{post.author?.bio||'Sphere creator'}</div></div></div>{post.caption&&<p>{post.caption}</p>}<div className="post-actions"><button onClick={()=>act(()=>api.like(String(post.id||post.post_id)),'like')} aria-pressed={liked}>♡ {liked?'Liked':'Like'}</button><button onClick={()=>act(()=>api.save(String(post.id||post.post_id)),'save')} aria-pressed={saved}>⌑ {saved?'Saved':'Save'}</button><span className="muted">{post.like_count||0} likes</span></div></div></article>}
+
+function apiBase(){return (import.meta.env.VITE_API_BASE_URL||'https://sphere-api.binancecompany274.workers.dev').replace(/\/$/,'')}
+
+function Search(){const[q,setQ]=useState('');const[users,setUsers]=useState<User[]>([]);const[posts,setPosts]=useState<Post[]>([]);const[busy,setBusy]=useState(false);async function search(){if(q.trim().length<2)return;setBusy(true);try{const r=await api.search(q);setUsers(r.users);setPosts(r.posts)}finally{setBusy(false)}}return <section><div className="section-heading"><div><p className="eyebrow">Discover</p><h1>Search</h1></div></div><div className="search-row"><input value={q} onChange={e=>setQ(e.target.value)} onKeyDown={e=>e.key==='Enter'&&search()} placeholder="Search users or posts"/><button className="primary small" onClick={search} disabled={busy}>Search</button></div>{!users.length&&!posts.length?<div className="empty-state compact"><h2>{q?'No matches':'Find people and posts'}</h2><p>Search uses real Sphere data.</p></div>:<div className="results">{users.map(u=><div className="result" key={u.id}><div className="avatar">{u.username[0]?.toUpperCase()}</div><div><strong>@{u.username}</strong><p className="muted">{u.bio||'Sphere user'}</p></div></div>)}{posts.map(p=><div className="result" key={p.id||p.post_id}><div><strong>{p.caption||'Image post'}</strong><p className="muted">@{p.author?.username||'creator'}</p></div></div>)}</div>}</section>}
+
+function Create({onCreated}:{onCreated:()=>void}){const[file,setFile]=useState<File|null>(null);const[caption,setCaption]=useState('');const[busy,setBusy]=useState(false);const[error,setError]=useState('');async function submit(e:FormEvent){e.preventDefault();if(!file)return setError('Choose an image first.');setBusy(true);setError('');try{const uploaded=await api.uploadImage(file);await api.createPost({caption,imageKey:uploaded.key});onCreated()}catch(e){setError(e instanceof Error?e.message:'Unable to create post')}finally{setBusy(false)}}return <section><div className="section-heading"><div><p className="eyebrow">Publish</p><h1>Create</h1></div></div><form className="composer" onSubmit={submit}><label>Image<input type="file" accept="image/jpeg,image/png,image/webp,image/gif" onChange={e=>setFile(e.target.files?.[0]||null)} required/></label>{file&&<img className="preview" src={URL.createObjectURL(file)} alt="Selected preview"/>}<label>Caption<textarea value={caption} onChange={e=>setCaption(e.target.value)} maxLength={2200} placeholder="Say something…"/></label>{error&&<div className="error">{error}</div>}<button className="primary" disabled={busy}>{busy?'Publishing…':'Publish image'}</button><p className="muted">Sphere posts contain one image, optional song metadata and a caption. No video uploads.</p></form></section>}
+
+function Earn(){const[offers,setOffers]=useState<unknown[]|null>(null);useEffect(()=>{api.earn().then(r=>setOffers(r.offers)).catch(()=>setOffers([]))},[]);return <section><div className="section-heading"><div><p className="eyebrow">Rewards</p><h1>Earn</h1></div></div>{offers===null?<div className="empty-state compact"><h2>Loading offers</h2></div>:offers.length?<div className="results">{offers.map((o:any,i)=><div className="result" key={o.id||i}><strong>{o.title||o.name||'Reward offer'}</strong><span className="muted">Available</span></div>)}</div>:<div className="empty-state compact"><h2>No earning offers are available right now.</h2><p>Offerwall providers are not active yet. Sphere will not fabricate offers or earnings.</p></div>}</section>}
+
+function Wallet(){const[data,setData]=useState<{wallet:Record<string,unknown>|null;transactions:unknown[]}|null>(null);useEffect(()=>{api.wallet().then(setData).catch(()=>setData({wallet:null,transactions:[]}))},[]);return <section><div className="section-heading"><div><p className="eyebrow">Money</p><h1>Wallet</h1></div></div>{data?.wallet?<div className="wallet-summary"><h2>Wallet connected</h2><p className="muted">Balance is read from the server-side wallet record.</p></div>:<div className="empty-state compact"><h2>No wallet balance is available</h2><p>No payment provider is active and no balance is fabricated. Transaction history will appear when real wallet activity exists.</p></div>}</section>}
+
+function Profile({user,onLogout,onUpdated}:{user:User;onLogout:()=>void;onUpdated:(u:User)=>void}){const[bio,setBio]=useState(user.bio||'');const[busy,setBusy]=useState(false);async function save(){setBusy(true);try{const r=await fetch(`${apiBase()}/me`,{method:'PATCH',credentials:'include',headers:{'content-type':'application/json'},body:JSON.stringify({bio})});const d=await r.json();if(!r.ok)throw new Error(d.error||'Unable to update profile');onUpdated(d.user)}finally{setBusy(false)}}return <section><div className="section-heading"><div><p className="eyebrow">Account</p><h1>Profile</h1></div><button className="quiet-button" onClick={onLogout}>Log out</button></div><div className="profile-head"><div className="avatar large">{user.username[0]?.toUpperCase()}</div><div><h2>@{user.username}</h2><p className="muted">{user.email}</p></div></div><div className="composer"><label>Bio<textarea value={bio} onChange={e=>setBio(e.target.value)} maxLength={500}/></label><button className="primary" onClick={save} disabled={busy}>{busy?'Saving…':'Save profile'}</button></div></section>}
 
 export default App;
