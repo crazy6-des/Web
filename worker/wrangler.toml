@@ -9,7 +9,7 @@ database_id = "4de71dc8-fd19-44c2-994f-e5c0dbbf4dc2"
 
 [[r2_buckets]]
 binding = "R2"
-bucket_name = "sphere socials"
+bucket_name = "spheresocial"
 
 [vars]
 # Set FRONTEND_ORIGIN in Cloudflare when the Netlify site exists.
