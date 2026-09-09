@@ -1,0 +1,8 @@
+{
+  "name": "sphere-api",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {"check": "tsc --noEmit"},
+  "devDependencies": {"@cloudflare/workers-types": "latest", "typescript": "latest"}
+}
