@@ -1,38 +1,36 @@
 export const API_BASE = (import.meta.env.VITE_API_BASE_URL || 'https://sphere-api.binancecompany274.workers.dev').replace(/\/$/, '');
-
-export class ApiError extends Error {
-  status: number;
-  constructor(message: string, status: number) { super(message); this.status = status; }
-}
-
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const headers = new Headers(init.headers);
-  if (init.body && !(init.body instanceof FormData)) headers.set('content-type', 'application/json');
-  const response = await fetch(`${API_BASE}${path}`, { ...init, headers, credentials: 'include' });
-  const contentType = response.headers.get('content-type') || '';
-  const data = contentType.includes('application/json') ? await response.json() : await response.text();
-  if (!response.ok) throw new ApiError(typeof data === 'object' && data?.error ? data.error : 'Request failed', response.status);
-  return data as T;
-}
-
-export const api = {
-  session: () => request<{ user: User | null }>('/auth/session'),
-  signup: (input: { username: string; email: string; password: string }) => request<{ user: User }>('/auth/signup', { method: 'POST', body: JSON.stringify(input) }),
-  login: (input: { email?: string; username?: string; password: string }) => request<{ user: User }>('/auth/login', { method: 'POST', body: JSON.stringify(input) }),
-  logout: () => request<{ ok: true }>('/auth/logout', { method: 'POST' }),
-  posts: (limit = 20, offset = 0) => request<{ posts: Post[] }>(`/posts?limit=${limit}&offset=${offset}`),
-  like: (postId: string) => request<{ liked: boolean }>(`/posts/${encodeURIComponent(postId)}/like`, { method: 'POST' }),
-  save: (postId: string) => request<{ saved: boolean }>(`/posts/${encodeURIComponent(postId)}/save`, { method: 'POST' }),
-  comment: (postId: string, content: string, parentId?: string) => request<{ comment_id: string }>(`/posts/${encodeURIComponent(postId)}/comments`, { method: 'POST', body: JSON.stringify({ content, parent_id: parentId }) }),
-  follow: (userId: string) => request<{ following: boolean }>('/follows', { method: 'POST', body: JSON.stringify({ user_id: userId }) }),
-  notifications: () => request<{ notifications: unknown[] }>('/notifications'),
-  search: (q: string) => request<{ users: User[]; posts: Post[] }>(`/search?q=${encodeURIComponent(q)}`),
-  uploadImage: (file: File) => { const form = new FormData(); form.append('file', file); return request<{ key: string }>('/upload/image', { method: 'POST', body: form }); },
-  createPost: (input: { caption: string; music?: Music; imageKey?: string }) => request<{ post_id: string }>('/posts', { method: 'POST', body: JSON.stringify(input) }),
-  wallet: () => request<{ wallet: Record<string, unknown> | null; transactions: unknown[] }>('/wallet'),
-  earn: () => request<{ offers: unknown[] }>('/earn/offers'),
+export class ApiError extends Error { status:number; constructor(message:string,status:number){super(message);this.status=status;} }
+let refreshing: Promise<unknown>|null=null;
+async function raw<T>(path:string,init:RequestInit={}):Promise<T>{const headers=new Headers(init.headers);if(init.body&&!(init.body instanceof FormData))headers.set('content-type','application/json');const r=await fetch(`${API_BASE}${path}`,{...init,headers,credentials:'include'});const type=r.headers.get('content-type')||'';const data=type.includes('application/json')?await r.json():await r.text();if(!r.ok)throw new ApiError(typeof data==='object'&&data?.error?data.error:'Request failed',r.status);return data as T;}
+async function request<T>(path:string,init:RequestInit={},retry=true):Promise<T>{try{return await raw<T>(path,init);}catch(e){if(retry&&e instanceof ApiError&&e.status===401&&path!=='/auth/refresh'&&path!=='/auth/session'){if(!refreshing)refreshing=raw('/auth/refresh',{method:'POST'}).finally(()=>{refreshing=null});try{await refreshing;return await raw<T>(path,init);}catch{}}throw e;}}
+export const api={
+ session:()=>request<{user:User|null}>('/auth/session'),
+ signup:(i:{username:string;email:string;password:string})=>request<{user:User}>('/auth/signup',{method:'POST',body:JSON.stringify(i)}),
+ login:(i:{email?:string;username?:string;password:string})=>request<{user:User}>('/auth/login',{method:'POST',body:JSON.stringify(i)}),
+ logout:()=>request<{ok:true}>('/auth/logout',{method:'POST'}),
+ forgotPassword:(email:string)=>request<{ok:true}>('/auth/forgot-password',{method:'POST',body:JSON.stringify({email})}),
+ resetPassword:(token:string,password:string)=>request<{ok:true}>('/auth/reset-password',{method:'POST',body:JSON.stringify({token,password})}),
+ me:()=>request<{user:User}>('/me'),
+ updateProfile:(input:Partial<Pick<User,'username'|'bio'|'avatar_url'>>)=>request<{user:User}>('/me',{method:'PATCH',body:JSON.stringify(input)}),
+ posts:(limit=20,offset=0)=>request<{posts:Post[]}>(`/posts?limit=${limit}&offset=${offset}`),
+ like:(id:string)=>request<{liked:boolean}>(`/posts/${encodeURIComponent(id)}/like`,{method:'POST'}),
+ save:(id:string)=>request<{saved:boolean}>(`/posts/${encodeURIComponent(id)}/save`,{method:'POST'}),
+ comment:(id:string,content:string,parent_id?:string)=>request<{comment_id:string}>(`/posts/${encodeURIComponent(id)}/comments`,{method:'POST',body:JSON.stringify({content,parent_id})}),
+ follow:(user_id:string)=>request<{following:boolean}>('/follows',{method:'POST',body:JSON.stringify({user_id})}),
+ notifications:()=>request<{notifications:unknown[]}>('/notifications'),
+ search:(q:string)=>request<{users:User[];posts:Post[]}>(`/search?q=${encodeURIComponent(q)}`),
+ settings:()=>request<{settings:Record<string,unknown>}>('/settings'),
+ updateSettings:(settings:Record<string,unknown>)=>request<{ok:true}>('/settings',{method:'PATCH',body:JSON.stringify(settings)}),
+ block:(user_id:string)=>request<{active:boolean}>('/blocks',{method:'POST',body:JSON.stringify({user_id})}),
+ mute:(user_id:string)=>request<{active:boolean}>('/mutes',{method:'POST',body:JSON.stringify({user_id})}),
+ uploadImage:(file:File)=>{const f=new FormData();f.append('file',file);return request<{key:string}>('/upload/image',{method:'POST',body:f});},
+ createPost:(i:{caption:string;music?:Music;imageKey:string})=>request<{post_id:string}>('/posts',{method:'POST',body:JSON.stringify(i)}),
+ messages:(conversation_id:string)=>request<{messages:Message[]}>(`/messages?conversation_id=${encodeURIComponent(conversation_id)}`),
+ sendMessage:(recipient_id:string,content:string)=>request<{conversation_id:string;message_id:string}>('/messages',{method:'POST',body:JSON.stringify({recipient_id,content})}),
+ wallet:()=>request<{wallet:Record<string,unknown>|null;transactions:unknown[]}>('/wallet'),
+ earn:()=>request<{offers:unknown[]}>('/earn/offers')
 };
-
-export type User = { id: string; username: string; email: string; avatar_url?: string | null; bio?: string | null; status?: string | null };
-export type Music = { provider?: string; id?: string; title?: string; artist?: string; album?: string; artwork_url?: string; duration_ms?: number; external_url?: string };
-export type Post = Record<string, any> & { id?: string; post_id?: string; caption?: string; author?: User; media?: Record<string, any> | null; like_count?: number };
+export type User={id:string;username:string;email:string;avatar_url?:string|null;bio?:string|null;status?:string|null};
+export type Music={provider?:string;id?:string;title?:string;artist?:string;album?:string;artwork_url?:string;duration_ms?:number;external_url?:string};
+export type Post=Record<string,any>&{id?:string;post_id?:string;caption?:string;author?:User;media?:Record<string,any>|null;like_count?:number};
+export type Message=Record<string,any>&{id?:string;message_id?:string;content?:string;body?:string;sender_id?:string;created_at?:number};
