@@ -5,14 +5,12 @@ compatibility_date = "2026-09-09"
 [[d1_databases]]
 binding = "DB"
 database_name = "sphere"
-# Keep the existing production database_id in Cloudflare/Wrangler configuration.
-# Do not create or replace the database.
-
-disable_trigger_auto_update = true
+database_id = "4de71dc8-fd19-44c2-994f-e5c0dbbf4dc2"
 
 [[r2_buckets]]
 binding = "R2"
-bucket_name = "sphere"
+bucket_name = "sphere socials"
 
 [vars]
-# Non-secret runtime configuration only. Secrets stay in Cloudflare.
+# Set FRONTEND_ORIGIN in Cloudflare when the Netlify site exists.
+# Do not put secrets in this file.
