@@ -29,3 +29,16 @@ jobs:
         working-directory: worker
       - run: npm run check
         working-directory: worker
+
+  deploy-worker:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [frontend, worker]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy existing Sphere Worker
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          command: deploy
+          workingDirectory: worker
