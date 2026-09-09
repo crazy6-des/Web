@@ -1,0 +1,106 @@
+name: signup-diagnostic
+
+on:
+  workflow_dispatch:
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Patch temporary signup diagnostics
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path('worker/src/index.ts')
+          s = p.read_text()
+          helper = '''
+function signupDiagnosticError(stage: string, error: unknown) {
+  const name = error instanceof Error && error.name ? error.name : 'Error';
+  let message = error instanceof Error ? error.message : String(error);
+  message = message.replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}/gi, '[redacted-email]');
+  message = message.replace(/Bearer\\s+[^\\s]+/gi, 'Bearer [redacted]');
+  message = message.replace(/(?:password|token|secret|cookie|authorization)[^,; ]*\\s*[:=]\\s*[^,; ]+/gi, '$1=[redacted]');
+  message = message.slice(0, 300);
+  console.error(JSON.stringify({ sphereSignupDiagnostic: true, stage, error: { name: name.slice(0, 80), message } }));
+}
+function signupDiagnosticStage(stage: string) {
+  console.log(JSON.stringify({ sphereSignupDiagnostic: true, stage }));
+}
+'''
+          marker = "function requireId(v:string,name:string){"
+          if 'sphereSignupDiagnostic' not in s:
+              s = s.replace(marker, helper + marker, 1)
+          start = s.index("if(path==='/auth/signup'&&req.method==='POST'){")
+          end = s.index("if(path==='/auth/login'&&req.method==='POST'){")
+          replacement = '''if(path==='/auth/signup'&&req.method==='POST'){
+  let signupStage='request/body validation';
+  try {
+    signupDiagnosticStage(signupStage);
+    if(!await rateLimit(env,req,'signup',8,3600))return json({error:'Too many signup attempts'},429,ch);
+    const b=await body(),username=text(b.username).trim().toLowerCase(),email=text(b.email).trim().toLowerCase(),password=text(b.password);
+    if(!/^[a-z0-9_.]{3,30}$/.test(username)||!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)||password.length<8)return json({error:'Invalid signup details'},400,ch);
+    signupStage='findUser'; signupDiagnosticStage(signupStage);
+    if(await findUser(env.DB,username)||await findUser(env.DB,email))return json({error:'Unable to create account with those details'},409,ch);
+    signupStage='passwordHash'; signupDiagnosticStage(signupStage);
+    const ph=await passwordHash(password),id=newId();
+    signupStage='insert(users)'; signupDiagnosticStage(signupStage);
+    await insert(env.DB,'users',{id,username,email,password_hash:ph,role:'USER',status:'ACTIVE',created_at:now(),updated_at:now()});
+    signupStage='securityEvent'; signupDiagnosticStage(signupStage);
+    await securityEvent(env,'signup',id,req);
+    signupStage='createTokens'; signupDiagnosticStage(signupStage);
+    const t=await createTokens(env,id),h=new Headers(ch);setTokens(h,t);
+    signupStage='getUser'; signupDiagnosticStage(signupStage);
+    const user=await getUser(env.DB,id);
+    signupStage='final response'; signupDiagnosticStage(signupStage);
+    return json({user},201,h);
+  } catch (e) {
+    signupDiagnosticError(signupStage,e);
+    throw e;
+  }
+}
+'''
+          s = s[:start] + replacement + s[end:]
+          p.write_text(s)
+      - name: Install Worker dependencies
+        run: npm install
+        working-directory: worker
+      - name: Worker typecheck
+        run: npm run check
+        working-directory: worker
+      - name: Deploy diagnostic Worker
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: worker
+          command: deploy
+      - name: Tail Worker logs and trigger exactly one signup
+        shell: bash
+        env:
+          API_BASE: https://sphere-api.binancecompany274.workers.dev
+        run: |
+          set -euo pipefail
+          rm -f /tmp/sphere-tail.log
+          npx --yes wrangler@latest tail sphere-api --format json --method POST > /tmp/sphere-tail.log 2>&1 &
+          TAIL_PID=$!
+          trap 'kill "$TAIL_PID" 2>/dev/null || true' EXIT
+          sleep 8
+          USERNAME="diag$(date +%s)"
+          EMAIL="diag$(date +%s)@example.invalid"
+          PASSWORD="$(openssl rand -base64 24)"
+          PAYLOAD=$(printf '{"username":"%s","email":"%s","password":"%s"}' "$USERNAME" "$EMAIL" "$PASSWORD")
+          HTTP_CODE=$(curl -sS -o /tmp/signup-response.json -w '%{http_code}' -X POST "$API_BASE/auth/signup" -H 'content-type: application/json' -H 'x-sphere-diagnostic: signup-stage-debug' --data "$PAYLOAD")
+          echo "signup_http_status=$HTTP_CODE"
+          cat /tmp/signup-response.json
+          echo
+          sleep 8
+          kill "$TAIL_PID" 2>/dev/null || true
+          sleep 2
+          echo '--- diagnostic Worker logs ---'
+          grep -E 'sphereSignupDiagnostic|"exceptions"|/auth/signup' /tmp/sphere-tail.log || true
+          echo '--- end diagnostic Worker logs ---'
