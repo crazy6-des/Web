@@ -1,0 +1,45 @@
+name: sphere-runtime-fix
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/sphere-runtime-fix.yml'
+permissions:
+  contents: write
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply confirmed Worker PBKDF2 runtime fix
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('worker/src/index.ts')
+          s=p.read_text()
+          if s.count('iterations:210000') != 1: raise SystemExit('expected one 210000 iteration value')
+          s=s.replace('iterations:210000','iterations:100000',1)
+          if s.count('return `210000$${salt}$${b64(bits)}`;') != 1: raise SystemExit('expected one 210000 hash marker')
+          s=s.replace('return `210000$${salt}$${b64(bits)}`;','return `100000$${salt}$${b64(bits)}`;',1)
+          p.write_text(s)
+          PY
+      - name: Typecheck and deploy confirmed fix
+        run: |
+          npm install
+          npm run check
+          npx wrangler@4 deploy
+        working-directory: worker
+      - name: Commit confirmed runtime fix and remove this workflow
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          rm -f .github/workflows/sphere-runtime-fix.yml
+          git add worker/src/index.ts .github/workflows/sphere-runtime-fix.yml
+          git commit -m 'fix: use production-safe PBKDF2 iteration count'
+          git push origin HEAD:main
