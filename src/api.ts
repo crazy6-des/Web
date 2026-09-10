@@ -1,4 +1,4 @@
-export const API_BASE = (import.meta.env.VITE_API_BASE_URL || 'https://sphere-api.binancecompany274.workers.dev').replace(/\/$/, '');
+export const API_BASE = String(import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 export class ApiError extends Error { status:number; constructor(message:string,status:number){super(message);this.status=status;} }
 let refreshing: Promise<unknown>|null=null;
 async function raw<T>(path:string,init:RequestInit={}):Promise<T>{const headers=new Headers(init.headers);if(init.body&&!(init.body instanceof FormData))headers.set('content-type','application/json');const r=await fetch(`${API_BASE}${path}`,{...init,headers,credentials:'include'});const type=r.headers.get('content-type')||'';const data=type.includes('application/json')?await r.json():await r.text();if(!r.ok)throw new ApiError(typeof data==='object'&&data?.error?data.error:'Request failed',r.status);return data as T;}
@@ -14,7 +14,7 @@ export const api={
  updateProfile:(input:Partial<Pick<User,'username'|'bio'|'avatar_url'>>)=>request<{user:User}>('/me',{method:'PATCH',body:JSON.stringify(input)}),
  posts:(limit=20,offset=0)=>request<{posts:Post[]}>(`/posts?limit=${limit}&offset=${offset}`),
  like:(id:string)=>request<{liked?:boolean;saved?:boolean}>(`/posts/${encodeURIComponent(id)}/like`,{method:'POST'}),
- save:(id:string)=>request<{liked?:boolean;saved?:boolean}>(`/posts/${encodeURIComponent(id)}/save`,{method:'POST'}),
+ save:(id:string)=>request<{liked?:boolean;saved?:boolean}>(`/posts/${encodeURIComponent(id)}/save`,{method:'POST'}), deletePost:(id:string)=>request<{ok:true}>(`/posts/${encodeURIComponent(id)}`,{method:'DELETE'}),
  comment:(id:string,content:string,parent_id?:string)=>request<{comment_id:string}>(`/posts/${encodeURIComponent(id)}/comments`,{method:'POST',body:JSON.stringify({content,parent_id})}),
  commentLike:(id:string)=>request<{liked:boolean}>(`/comments/${encodeURIComponent(id)}/like`,{method:'POST'}),
  deleteComment:(id:string)=>request<{ok:true}>(`/comments/${encodeURIComponent(id)}/delete`,{method:'POST'}),
@@ -28,7 +28,7 @@ export const api={
  block:(user_id:string)=>request<{active:boolean}>('/blocks',{method:'POST',body:JSON.stringify({user_id})}),
  mute:(user_id:string)=>request<{active:boolean}>('/mutes',{method:'POST',body:JSON.stringify({user_id})}),
  uploadImage:(file:File)=>{const f=new FormData();f.append('file',file);return request<{key:string}>('/upload/image',{method:'POST',body:f});},
- createPost:(i:{caption:string;music?:Music;imageKey:string})=>request<{post_id:string}>('/posts',{method:'POST',body:JSON.stringify(i)}),
+ createPost:(i:{caption:string;music?:Music;imageKey:string})=>request<{post_id:string}>('/posts',{method:'POST',body:JSON.stringify(i)}), musicSearch:(q:string)=>request<{tracks:Music[]}>(`/music/search?q=${encodeURIComponent(q)}`),
  messages:(conversation_id:string)=>request<{messages:Message[]}>(`/messages?conversation_id=${encodeURIComponent(conversation_id)}`),
  sendMessage:(recipient_id:string,content:string)=>request<{conversation_id:string;message_id:string}>('/messages',{method:'POST',body:JSON.stringify({recipient_id,content})}),
  readMessages:(conversation_id:string)=>request<{ok:true}>(`/messages/${encodeURIComponent(conversation_id)}/read`,{method:'POST'}),
