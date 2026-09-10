@@ -41,3 +41,4 @@ jobs:
           USERNAME="$(cat /tmp/username)"
           npx wrangler@4 d1 execute sphere --remote --command "SELECT id,username,role,status FROM users WHERE username='$USERNAME'"
           test "$STATUS" = "201"
+# final runtime proof rerun
