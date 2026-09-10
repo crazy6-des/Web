@@ -15,7 +15,7 @@ export const api={
  posts:(limit=20,offset=0)=>request<{posts:Post[]}>(`/posts?limit=${limit}&offset=${offset}`),
  like:(id:string)=>request<{liked?:boolean;saved?:boolean}>(`/posts/${encodeURIComponent(id)}/like`,{method:'POST'}),
  save:(id:string)=>request<{liked?:boolean;saved?:boolean}>(`/posts/${encodeURIComponent(id)}/save`,{method:'POST'}), deletePost:(id:string)=>request<{ok:true}>(`/posts/${encodeURIComponent(id)}`,{method:'DELETE'}),
- comment:(id:string,content:string,parent_id?:string)=>request<{comment_id:string}>(`/posts/${encodeURIComponent(id)}/comments`,{method:'POST',body:JSON.stringify({content,parent_id})}),
+ comment:(id:string,content:string,parent_id?:string)=>request<{comment_id:string}>(`/posts/${encodeURIComponent(id)}/comments`,{method:'POST',body:JSON.stringify({content,parent_id})}),comments:(id:string)=>request<{comments:any[]}>(`/posts/${encodeURIComponent(id)}/comments`),
  commentLike:(id:string)=>request<{liked:boolean}>(`/comments/${encodeURIComponent(id)}/like`,{method:'POST'}),
  deleteComment:(id:string)=>request<{ok:true}>(`/comments/${encodeURIComponent(id)}/delete`,{method:'POST'}),
  follow:(user_id:string)=>request<{following:boolean;pending?:boolean}>('/follows',{method:'POST',body:JSON.stringify({user_id})}),

@@ -11,7 +11,102 @@ function Auth({onAuth}:{onAuth:(u:User)=>void}){const[mode,setMode]=useState<'lo
 function Heading({eyebrow,title,children}:{eyebrow:string;title:string;children?:ReactNode}){return <div className="section-heading"><div><p className="eyebrow">{eyebrow}</p><h1>{title}</h1></div>{children}</div>}
 function Empty({title,text:copy}:{title:string;text?:string}){return <div className="empty-state"><div className="empty-mark">S</div><h2>{title}</h2>{copy&&<p>{copy}</p>}</div>}
 function Home({user}:{user:User}){const[posts,setPosts]=useState<Post[]>([]);const[loading,setLoading]=useState(true);const[error,setError]=useState('');const load=()=>{setLoading(true);api.posts().then(r=>setPosts(r.posts)).catch(e=>setError(e instanceof Error?e.message:'Unable to load feed')).finally(()=>setLoading(false))};useEffect(load,[]);return <section><Heading eyebrow="Social" title="For you"><button className="quiet-button" onClick={load}>Refresh</button></Heading>{loading&&<Empty title="Loading feed"/>}{error&&<div className="error-block">{error}</div>}{!loading&&!error&&!posts.length&&<Empty title="Your feed starts here" text="There are no posts available yet. Create an image post or follow people to build your feed."/>}<div className="feed">{posts.map(p=><PostCard key={String(p.id||p.post_id)} post={p} currentUser={user} onDeleted={(id)=>setPosts(current=>current.filter(x=>String(x.id||x.post_id)!==id))}/>)}</div></section>}
-function PostCard({post,currentUser,onDeleted}:{post:Post;currentUser:User;onDeleted?:(id:string)=>void}){const[liked,setLiked]=useState(Boolean(post.liked));const[saved,setSaved]=useState(Boolean(post.saved));const[busy,setBusy]=useState(false);const[deleting,setDeleting]=useState(false);const media=post.media||{};const key=media.object_key||media.r2_key||media.storage_key||media.key;const image=key?`${base()}/media/${encodeURIComponent(String(key))}`:media.url||media.public_url;const songTitle=post.song_title||post.music?.title||post.music_metadata?.title;const songArtist=post.song_artist||post.music?.artist||post.music_metadata?.artist;const songUrl=post.song_url||post.music?.external_url||post.music_metadata?.external_url;async function act(kind:'like'|'save'){if(busy)return;setBusy(true);try{const r=kind==='like'?await api.like(String(post.id||post.post_id)):await api.save(String(post.id||post.post_id));kind==='like'?setLiked(Boolean(r.liked)):setSaved(Boolean(r.saved));}catch{}finally{setBusy(false)}}async function removePost(){if(deleting)return;if(!confirm('Delete this post?'))return;setDeleting(true);try{const id=String(post.id||post.post_id);await api.deletePost(id);onDeleted?.(id);}catch(e){alert(e instanceof Error?e.message:'Unable to delete post')}finally{setDeleting(false)}}return <article className="post-card">{image?<img className="post-image" src={image} alt={post.caption||'Sphere post'}/>:<div className="media-placeholder">Image unavailable</div>}<div className="post-body"><div className="post-author"><div className="avatar">{post.author?.username?.[0]?.toUpperCase()||'S'}</div><div><strong>@{post.author?.username||'sphere_user'}</strong><div className="muted">{post.author?.bio||'Sphere creator'}</div></div></div>{post.caption&&<p>{post.caption}</p>}{songTitle&&<div className="music-line">♫ {songUrl?<a href={songUrl} target="_blank" rel="noreferrer">{songTitle}{songArtist?` — ${songArtist}`:''}</a>:<span>{songTitle}{songArtist?` — ${songArtist}`:''}</span>}</div>}<div className="post-actions"><button onClick={()=>act('like')} aria-pressed={liked}>♡ {liked?'Liked':'Like'}</button><button onClick={()=>act('save')} aria-pressed={saved}>⌑ {saved?'Saved':'Save'}</button>{post.author?.id===currentUser.id&&<button className="quiet-button" onClick={removePost} disabled={deleting}>{deleting?'Deleting…':'Delete'}</button>}<span className="muted">{post.like_count||0} likes</span></div></div></article>}
+function PostCard({post,currentUser,onDeleted}:{post:Post;currentUser:User;onDeleted?:(id:string)=>void}){
+ const[liked,setLiked]=useState(Boolean(post.liked));
+ const[saved,setSaved]=useState(Boolean(post.saved));
+ const[busy,setBusy]=useState(false);
+ const[deleting,setDeleting]=useState(false);
+ const[comments,setComments]=useState<any[]|null>(null);
+ const[commentText,setCommentText]=useState('');
+ const[commentBusy,setCommentBusy]=useState(false);
+ const media=post.media||{};
+ const key=media.object_key||media.r2_key||media.storage_key||media.key;
+ const image=key?`${base()}/media/${encodeURIComponent(String(key))}`:media.url||media.public_url;
+ const songTitle=post.song_title||post.music?.title||post.music_metadata?.title;
+ const songArtist=post.song_artist||post.music?.artist||post.music_metadata?.artist;
+ const songUrl=post.song_url||post.music?.external_url||post.music_metadata?.external_url;
+
+ async function loadComments(){
+   try{
+     const r=await api.comments(String(post.id||post.post_id));
+     setComments(r.comments||[]);
+   }catch{
+     setComments([]);
+   }
+ }
+
+ async function act(kind:'like'|'save'){
+   if(busy)return;
+   setBusy(true);
+   try{
+     const r=kind==='like'
+       ?await api.like(String(post.id||post.post_id))
+       :await api.save(String(post.id||post.post_id));
+     kind==='like'?setLiked(Boolean(r.liked)):setSaved(Boolean(r.saved));
+   }catch{}finally{setBusy(false)}
+ }
+
+ async function addComment(){
+   const text=commentText.trim();
+   if(!text||commentBusy)return;
+   setCommentBusy(true);
+   try{
+     await api.comment(String(post.id||post.post_id),text);
+     setCommentText('');
+     await loadComments();
+   }catch(e){
+     alert(e instanceof Error?e.message:'Unable to comment');
+   }finally{setCommentBusy(false)}
+ }
+
+ async function removePost(){
+   if(deleting)return;
+   if(!confirm('Delete this post?'))return;
+   setDeleting(true);
+   try{
+     const id=String(post.id||post.post_id);
+     await api.deletePost(id);
+     onDeleted?.(id);
+   }catch(e){
+     alert(e instanceof Error?e.message:'Unable to delete post');
+   }finally{setDeleting(false)}
+ }
+
+ return <article className="post-card">
+   {image?<img className="post-image" src={image} alt={post.caption||'Sphere post'}/>:<div className="media-placeholder">Image unavailable</div>}
+   <div className="post-body">
+     <div className="post-author">
+       <div className="avatar">{post.author?.username?.[0]?.toUpperCase()||'S'}</div>
+       <div><strong>@{post.author?.username||'sphere_user'}</strong><div className="muted">{post.author?.bio||'Sphere creator'}</div></div>
+     </div>
+     {post.caption&&<p>{post.caption}</p>}
+     {songTitle&&<div className="music-line">♫ {songUrl?<a href={songUrl} target="_blank" rel="noreferrer">{songTitle}{songArtist?` — ${songArtist}`:''}</a>:<span>{songTitle}{songArtist?` — ${songArtist}`:''}</span>}</div>}
+     <div className="post-actions">
+       <button onClick={()=>act('like')} aria-pressed={liked}>♡ {liked?'Liked':'Like'}</button>
+       <button onClick={()=>act('save')} aria-pressed={saved}>⌑ {saved?'Saved':'Save'}</button>
+       <button onClick={loadComments}>{comments===null?'Comments':'Hide comments'}</button>
+       {post.author?.id===currentUser.id&&<button className="quiet-button" onClick={removePost} disabled={deleting}>{deleting?'Deleting…':'Delete'}</button>}
+       <span className="muted">{post.like_count||0} likes</span>
+     </div>
+     {comments!==null&&<div className="comments">
+       <div className="comment-form">
+         <input value={commentText} onChange={e=>setCommentText(e.target.value)} placeholder="Write a comment…" maxLength={2000}/>
+         <button onClick={addComment} disabled={commentBusy||!commentText.trim()}>{commentBusy?'Posting…':'Post'}</button>
+       </div>
+       {!comments.length?<div className="muted">No comments yet.</div>:comments.map((c:any)=><div className="comment" key={c.id||c.comment_id}>
+         <strong>@{c.author?.username||'sphere_user'}</strong>
+         <span>{c.content||c.body||''}</span>
+         <button onClick={async()=>{
+           try{
+             const r=await api.commentLike(String(c.id||c.comment_id));
+             setComments(xs=>(xs||[]).map(x=>(x.id||x.comment_id)===(c.id||c.comment_id)?{...x,liked:r.liked,like_count:Math.max(0,Number(x.like_count||0)+(r.liked?1:-1))}:x));
+           }catch{}
+         }}>{c.liked?'♥':'♡'} {c.like_count||0}</button>
+       </div>)}
+     </div>}
+   </div>
+ </article>
+}
 function Search({onOpenProfile}:{onOpenProfile:(s:Section)=>void}){const[q,setQ]=useState('');const[users,setUsers]=useState<User[]>([]);const[posts,setPosts]=useState<Post[]>([]);const[busy,setBusy]=useState(false);async function run(){if(q.trim().length<2)return;setBusy(true);try{const r=await api.search(q);setUsers(r.users);setPosts(r.posts)}catch{}finally{setBusy(false)}}return <section><Heading eyebrow="Discover" title="Search"/><div className="search-row"><input value={q} onChange={e=>setQ(e.target.value)} onKeyDown={e=>e.key==='Enter'&&run()} placeholder="Search users or posts"/><button className="primary small" onClick={run} disabled={busy}>Search</button></div>{!users.length&&!posts.length?<Empty title={q?'No matches':'Find people and posts'} text="Search uses real Sphere data."/>:<div className="results">{users.map(u=><div className="result" key={u.id}><div className="avatar">{u.username[0]?.toUpperCase()}</div><div><strong>@{u.username}</strong><p className="muted">{u.bio||'Sphere user'}</p></div><button className="quiet-button" onClick={()=>onOpenProfile('messages')}>Message</button></div>)}{posts.map(p=><div className="result" key={p.id||p.post_id}><strong>{p.caption||'Image post'}</strong><p className="muted">@{p.author?.username||'creator'}</p></div>)}</div>}</section>}
 function Create({onCreated}:{onCreated:()=>void}){const[file,setFile]=useState<File|null>(null);const[caption,setCaption]=useState('');const[music,setMusic]=useState('');const[selectedMusic,setSelectedMusic]=useState<Music|undefined>();const[musicResults,setMusicResults]=useState<Music[]>([]);const[musicBusy,setMusicBusy]=useState(false);const[busy,setBusy]=useState(false);const[error,setError]=useState('');const preview=useMemo(()=>file?URL.createObjectURL(file):'', [file]);async function searchMusic(){const q=music.trim();if(q.length<2){setMusicResults([]);return}setMusicBusy(true);try{const r=await api.musicSearch(q);setMusicResults(r.tracks||[])}catch{setMusicResults([])}finally{setMusicBusy(false)}}async function submit(e:FormEvent){e.preventDefault();if(!file)return setError('Choose an image first.');setBusy(true);setError('');try{const uploaded=await api.uploadImage(file);const musicData=selectedMusic|| (music.trim()?{provider:'manual-metadata',title:music.trim()}:undefined);await api.createPost({caption,music:musicData,imageKey:uploaded.key});onCreated()}catch(e){setError(e instanceof Error?e.message:'Unable to create post')}finally{setBusy(false)}}return <section><Heading eyebrow="Publish" title="Create"/><form className="composer" onSubmit={submit}><label>Image<input type="file" accept="image/jpeg,image/png,image/webp,image/gif" onChange={e=>setFile(e.target.files?.[0]||null)} required/></label>{preview&&<img className="preview" src={preview} alt="Selected preview"/>}<label>Caption<textarea value={caption} onChange={e=>setCaption(e.target.value)} maxLength={2200} placeholder="Say something…"/></label><label>Song (optional)<input value={music} onChange={e=>{setMusic(e.target.value);setSelectedMusic(undefined)}} onKeyDown={e=>e.key==='Enter'&&(e.preventDefault(),searchMusic())} placeholder="Song title / artist"/><button type="button" className="quiet-button" onClick={searchMusic} disabled={musicBusy}>{musicBusy?'Searching…':'Search music'}</button></label>{selectedMusic&&<div className="music-line">♫ {selectedMusic.title}{selectedMusic.artist?` — ${selectedMusic.artist}`:''}</div>}{musicResults.length>0&&<div className="results">{musicResults.map((m:Music)=><button type="button" className="result" key={m.id||`${m.title}-${m.artist}`} onClick={()=>{setMusic(m.title||'');setSelectedMusic(m);setMusicResults([])}}><strong>{m.title}</strong><span className="muted">{m.artist}{m.album?` · ${m.album}`:''}</span></button>)}</div>}{error&&<div className="error">{error}</div>}<button className="primary" disabled={busy}>{busy?'Publishing…':'Publish image'}</button><p className="muted">One image per post. Sphere stores metadata only; it does not download copyrighted music or accept video uploads.</p></form></section>}
 function Earn(){const[offers,setOffers]=useState<unknown[]|null>(null);useEffect(()=>{api.earn().then(r=>setOffers(r.offers)).catch(()=>setOffers([]))},[]);return <section><Heading eyebrow="Rewards" title="Earn"/>{offers===null?<Empty title="Loading offers"/>:offers.length?<div className="results">{offers.map((o:any,i)=><div className="result" key={o.id||i}><strong>{o.title||o.name||'Reward offer'}</strong><span className="muted">Provider configured</span></div>)}</div>:<Empty title="No earning offers are available right now." text="Offerwall providers remain safely inactive until production configuration is supplied. Sphere will never fabricate offers or earnings."/>}</section>}

@@ -84,7 +84,41 @@ if(path.startsWith('/posts/')&&req.method==='DELETE'){
   await env.DB.prepare(`DELETE FROM posts WHERE ${ident(idc)}=?`).bind(pid).run();
   return json({ok:true},200,ch);
 }
-if(path.startsWith('/posts/')&&path.endsWith('/comments')&&req.method==='POST'){requireAuth(a);const pid=requireId(decodeURIComponent(path.slice(7,-9)),'post id'),post=await env.DB.prepare('SELECT * FROM posts WHERE id=? OR post_id=? LIMIT 1').bind(pid,pid).first<Row>();if(!post)return json({error:'Post not found'},404,ch);const owner=rowId(post),b=await body(),content=text(b.content).trim().slice(0,2000),parent=text(b.parent_id)||undefined;if(!content)return json({error:'Comment is required'},400,ch);if(await blocked(env,a.user.id,owner))return json({error:'Forbidden'},403,ch);if(parent){const p=await env.DB.prepare('SELECT * FROM comments WHERE id=? OR comment_id=? LIMIT 1').bind(parent,parent).first<Row>();if(!p||rowId(p)!==pid)return json({error:'Invalid parent comment'},400,ch);}const c=await columns(env.DB,'comments'),pc=first(c,['post_id']),uc=first(c,['user_id','author_id']),cc=first(c,['content','body']);if(!pc||!uc||!cc)return json({error:'Comments unavailable'},503,ch);const cid=newId();await insert(env.DB,'comments',{id:cid,comment_id:cid,post_id:pid,user_id:a.user.id,author_id:a.user.id,content,body:content,parent_id:parent,reply_to_id:parent,created_at:now(),updated_at:now()});if(owner!==a.user.id)await notify(env,owner,a.user.id,parent?'reply':'comment',cid);await mentionText(env,a.user.id,content,cid,'comment');return json({comment_id:cid},201,ch);}
+if(path.startsWith('/posts/')&&path.endsWith('/comments')&&req.method==='GET'){
+ requireAuth(a);
+ const pid=requireId(decodeURIComponent(path.slice(7,-9)),'post id');
+ const post=await env.DB.prepare('SELECT * FROM posts WHERE id=? LIMIT 1').bind(pid).first<Row>();
+ if(!post)return json({error:'Post not found'},404,ch);
+ const owner=rowId(post);
+ if(await blocked(env,a.user.id,owner))return json({error:'Forbidden'},403,ch);
+ const c=await columns(env.DB,'comments');
+ const pc=first(c,['post_id']),uc=first(c,['user_id','author_id']),cc=first(c,['content','body']);
+ if(!pc||!uc||!cc)return json({error:'Comments unavailable'},503,ch);
+ const rows=await env.DB.prepare(
+   `SELECT * FROM comments WHERE ${ident(pc)}=? ORDER BY created_at ASC LIMIT 200`
+ ).bind(pid).all<Row>();
+ const comments=[];
+ for(const r of rows.results||[]){
+   const cid=rowId(r);
+   const uid=String(r[uc]||'');
+   const author=uid?await env.DB.prepare('SELECT id,username,role,status,created_at,updated_at FROM users WHERE id=? LIMIT 1').bind(uid).first<Row>():null;
+   let like_count=0;
+   let liked=false;
+   try{
+     const lc=await columns(env.DB,'comment_likes');
+     const lpc=first(lc,['comment_id']),luc=first(lc,['user_id','actor_id']);
+     if(lpc&&luc){
+       const count=await env.DB.prepare(`SELECT COUNT(*) AS n FROM comment_likes WHERE ${ident(lpc)}=?`).bind(cid).first<{n:number}>();
+       like_count=Number(count?.n||0);
+       const mine=await env.DB.prepare(`SELECT 1 FROM comment_likes WHERE ${ident(lpc)}=? AND ${ident(luc)}=? LIMIT 1`).bind(cid,a.user.id).first();
+       liked=Boolean(mine);
+     }
+   }catch{}
+   comments.push({...r,id:cid,content:r[cc],author,like_count,liked});
+ }
+ return json({comments},200,ch);
+}
+if(path.startsWith('/posts/')&&path.endsWith('/comments')&&req.method==='POST'){requireAuth(a);const pid=requireId(decodeURIComponent(path.slice(7,-9)),'post id'),post=await env.DB.prepare('SELECT * FROM posts WHERE id=? LIMIT 1').bind(pid).first<Row>();if(!post)return json({error:'Post not found'},404,ch);const owner=rowId(post),b=await body(),content=text(b.content).trim().slice(0,2000),parent=text(b.parent_id)||undefined;if(!content)return json({error:'Comment is required'},400,ch);if(await blocked(env,a.user.id,owner))return json({error:'Forbidden'},403,ch);if(parent){const p=await env.DB.prepare('SELECT * FROM comments WHERE id=? OR comment_id=? LIMIT 1').bind(parent,parent).first<Row>();if(!p||rowId(p)!==pid)return json({error:'Invalid parent comment'},400,ch);}const c=await columns(env.DB,'comments'),pc=first(c,['post_id']),uc=first(c,['user_id','author_id']),cc=first(c,['content','body']);if(!pc||!uc||!cc)return json({error:'Comments unavailable'},503,ch);const cid=newId();await insert(env.DB,'comments',{id:cid,comment_id:cid,post_id:pid,user_id:a.user.id,author_id:a.user.id,content,body:content,parent_id:parent,reply_to_id:parent,created_at:now(),updated_at:now()});if(owner!==a.user.id)await notify(env,owner,a.user.id,parent?'reply':'comment',cid);await mentionText(env,a.user.id,content,cid,'comment');return json({comment_id:cid},201,ch);}
 const commentAct=path.match(/^\/comments\/([^/]+)\/(like|delete)$/);if(commentAct&&req.method==='POST'){requireAuth(a);const cid=requireId(decodeURIComponent(commentAct[1]),'comment id'),comment=await env.DB.prepare('SELECT * FROM comments WHERE id=? OR comment_id=? LIMIT 1').bind(cid,cid).first<Row>();if(!comment)return json({error:'Comment not found'},404,ch);const author=rowId(comment);if(commentAct[2]==='delete'){if(author!==a.user.id&&!await isAdmin(env,a.user.id))return json({error:'Forbidden'},403,ch);await env.DB.prepare('DELETE FROM comments WHERE id=? OR comment_id=?').bind(cid,cid).run();return json({ok:true},200,ch);}if(await blocked(env,a.user.id,author))return json({error:'Forbidden'},403,ch);const c=await columns(env.DB,'comment_likes'),cc=first(c,['comment_id']),uc=first(c,['user_id','actor_id']);if(!cc||!uc)return json({error:'Comment likes unavailable'},503,ch);const ex=await env.DB.prepare(`SELECT 1 FROM comment_likes WHERE ${ident(cc)}=? AND ${ident(uc)}=? LIMIT 1`).bind(cid,a.user.id).first();if(ex){await env.DB.prepare(`DELETE FROM comment_likes WHERE ${ident(cc)}=? AND ${ident(uc)}=?`).bind(cid,a.user.id).run();return json({liked:false},200,ch);}await insert(env.DB,'comment_likes',{id:newId(),comment_id:cid,user_id:a.user.id,actor_id:a.user.id,created_at:now()});if(author!==a.user.id)await notify(env,author,a.user.id,'comment_like',cid);return json({liked:true},200,ch);}
 if(path==='/follows'&&req.method==='POST'){requireAuth(a);const b=await body(),target=text(b.user_id);if(!target||target===a.user.id)return json({error:'Invalid follow target'},400,ch);if(await blocked(env,a.user.id,target)||await blocked(env,target,a.user.id))return json({error:'Unable to follow this user'},403,ch);const tcSettings=await settingRow(env,target),sc=tcSettings?await columns(env.DB,'user_settings'):new Set<string>();if(tcSettings&&sc.has('private_account')&&Boolean(tcSettings.private_account))return json({following:false,pending:true},202,ch);const c=await columns(env.DB,'follows'),fc=first(c,['follower_id','from_user_id','user_id']),tc=first(c,['following_id','to_user_id','target_user_id']);if(!fc||!tc)return json({error:'Follows unavailable'},503,ch);const ex=await env.DB.prepare(`SELECT 1 FROM follows WHERE ${ident(fc)}=? AND ${ident(tc)}=? LIMIT 1`).bind(a.user.id,target).first();if(ex){await env.DB.prepare(`DELETE FROM follows WHERE ${ident(fc)}=? AND ${ident(tc)}=?`).bind(a.user.id,target).run();return json({following:false},200,ch);}await insert(env.DB,'follows',{id:newId(),follower_id:a.user.id,from_user_id:a.user.id,user_id:a.user.id,following_id:target,to_user_id:target,target_user_id:target,created_at:now()});await notify(env,target,a.user.id,'follow',a.user.id);return json({following:true},200,ch);}
 if(path==='/notifications'&&req.method==='GET'){requireAuth(a);const c=await columns(env.DB,'notifications'),uc=first(c,['user_id','recipient_id']);if(!uc)return json({notifications:[]},200,ch);const r=await env.DB.prepare(`SELECT * FROM notifications WHERE ${ident(uc)}=? ORDER BY created_at DESC LIMIT 50`).bind(a.user.id).all<Row>();return json({notifications:r.results||[]},200,ch);}
