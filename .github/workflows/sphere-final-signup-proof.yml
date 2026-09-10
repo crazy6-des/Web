@@ -1,0 +1,43 @@
+name: sphere-final-signup-proof
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/sphere-final-signup-proof.yml'
+permissions:
+  contents: read
+jobs:
+  proof:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Verify final production signup and D1 persistence
+        run: |
+          set -euo pipefail
+          API_BASE="$(sed -n 's/.*VITE_API_BASE_URL = "\(.*\)"/\1/p' netlify.toml)"
+          export API_BASE
+          cd worker
+          npm install
+          node --input-type=module <<'NODE'
+          const base=process.env.API_BASE.replace(/\/$/,'');
+          const id=process.env.GITHUB_RUN_ID;
+          const username=`incident${id}`;
+          const email=`incident-${id}@example.invalid`;
+          const password=`SphereIncident-${id}-Safe!`;
+          const r=await fetch(`${base}/auth/signup`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({username,email,password})});
+          const text=await r.text();
+          let body;try{body=JSON.parse(text);}catch{body=text;}
+          console.log(JSON.stringify({status:r.status,body,username}));
+          await import('node:fs/promises').then(fs=>fs.writeFile('/tmp/status',String(r.status)));
+          await import('node:fs/promises').then(fs=>fs.writeFile('/tmp/username',username));
+          NODE
+          STATUS="$(cat /tmp/status)"
+          USERNAME="$(cat /tmp/username)"
+          npx wrangler@4 d1 execute sphere --remote --command "SELECT id,username,role,status FROM users WHERE username='$USERNAME'"
+          test "$STATUS" = "201"
