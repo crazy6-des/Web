@@ -17,16 +17,20 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Add temporary safe signup diagnostics
+      - name: Add temporary safe diagnostics
         run: |
           python3 - <<'PY'
           from pathlib import Path
           p=Path('worker/src/index.ts')
           s=p.read_text()
-          old="catch(e){const status=Number((e as any)?.status)||500;return json({error:status===401?'Authentication required':status<500?text((e as any)?.message):'Internal server error'},status,cors(env,req));}"
-          new="catch(e){try{const er=e as any;const raw=er instanceof Error?er.message:String(er??'');const safe=raw.replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}/g,'[redacted-email]').replace(/[A-Fa-f0-9]{32,}/g,'[redacted-token]').slice(0,300);console.error('sphere_error',JSON.stringify({path:new URL(req.url).pathname,error_name:er?.name||'Error',error_message:safe}));if(new URL(req.url).pathname==='/auth/signup')return json({error:'DIAGNOSTIC:'+safe},500,cors(env,req));}catch{}const status=Number((e as any)?.status)||500;return json({error:status===401?'Authentication required':status<500?text((e as any)?.message):'Internal server error'},status,cors(env,req));}"
-          if old not in s: raise SystemExit('target catch not found')
-          p.write_text(s.replace(old,new,1))
+          old_catch="catch(e){const status=Number((e as any)?.status)||500;return json({error:status===401?'Authentication required':status<500?text((e as any)?.message):'Internal server error'},status,cors(env,req));}"
+          new_catch="catch(e){try{const er=e as any;const raw=er instanceof Error?er.message:String(er??'');const safe=raw.replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}/g,'[redacted-email]').replace(/[A-Fa-f0-9]{32,}/g,'[redacted-token]').slice(0,300);console.error('sphere_error',JSON.stringify({path:new URL(req.url).pathname,error_name:er?.name||'Error',error_message:safe}));if(new URL(req.url).pathname==='/auth/signup')return json({error:'DIAGNOSTIC:'+safe},500,cors(env,req));}catch{}const status=Number((e as any)?.status)||500;return json({error:status===401?'Authentication required':status<500?text((e as any)?.message):'Internal server error'},status,cors(env,req));}"
+          if old_catch not in s: raise SystemExit('target catch not found')
+          s=s.replace(old_catch,new_catch,1)
+          marker="const ch=cors(env,req),body=async()=>req.headers.get('content-type')?.includes('application/json')?await req.json<Record<string,unknown>>():{};if(path==='/health')return json({ok:true,service:'sphere-api',database:'D1',storage:'R2'},200,ch);let a=await auth(env,req);"
+          replacement="const ch=cors(env,req),body=async()=>req.headers.get('content-type')?.includes('application/json')?await req.json<Record<string,unknown>>():{};if(path==='/health')return json({ok:true,service:'sphere-api',database:'D1',storage:'R2'},200,ch);if(path==='/_diag/pbkdf2'&&req.method==='GET'){try{await passwordHash('diagnostic');return json({ok:true},200,ch);}catch(e){const er=e as any;return json({ok:false,error_name:er?.name||'Error',error_message:String(er?.message||er).slice(0,300)},500,ch);}}let a=await auth(env,req);"
+          if marker not in s: raise SystemExit('route marker not found')
+          p.write_text(s.replace(marker,replacement,1))
           PY
       - name: Deploy diagnostic Worker
         run: |
