@@ -11,6 +11,9 @@ database_id = "4de71dc8-fd19-44c2-994f-e5c0dbbf4dc2"
 binding = "R2"
 bucket_name = "spheresocial"
 
+[secrets]
+required = ["JWT_SECRET", "JWT_REFRESH_SECRET"]
+
 [vars]
 # Set FRONTEND_ORIGIN in Cloudflare when the Netlify site exists.
 # Do not put secrets in this file.
