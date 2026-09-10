@@ -1,0 +1,46 @@
+name: sphere-production-smoke
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/sphere-production-smoke.yml'
+permissions:
+  contents: read
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run real auth smoke test
+        run: |
+          set -euo pipefail
+          API_BASE="$(sed -n 's/.*VITE_API_BASE_URL = "\(.*\)"/\1/p' netlify.toml)"
+          export API_BASE
+          cd worker
+          npm install
+          node --input-type=module <<'NODE'
+          const base = process.env.API_BASE.replace(/\/$/, '');
+          const id = process.env.GITHUB_RUN_ID;
+          const username = `incident${id}`;
+          const email = `incident-${id}@example.invalid`;
+          const password = `SphereIncident-${id}-Safe!`;
+          const cookies = new Map();
+          function saveCookies(r){for(const h of r.headers.getSetCookie?.()||[]){const p=h.split(';',1)[0];const i=p.indexOf('=');if(i>0)cookies.set(p.slice(0,i),p.slice(i+1));}}
+          function cookieHeader(){return [...cookies].map(([k,v])=>`${k}=${v}`).join('; ');}
+          async function call(path,init={}){const headers=new Headers(init.headers||{});const c=cookieHeader();if(c)headers.set('cookie',c);const r=await fetch(base+path,{...init,headers});saveCookies(r);const text=await r.text();let body;try{body=JSON.parse(text);}catch{body=text;}console.log(JSON.stringify({path,status:r.status,body:typeof body==='string'?body:'[json]'}));if(r.status>=500)throw new Error(`${path} returned ${r.status}`);return {r,body};}
+          await call('/auth/signup',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({username,email,password})});
+          cookies.clear();
+          await call('/auth/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({login:username,password})});
+          await call('/auth/me');
+          await call('/auth/logout',{method:'POST'});
+          console.log(JSON.stringify({username,smoke:'signup-login-me-logout-complete'}));
+          await import('node:fs/promises').then(fs=>fs.writeFile('/tmp/smoke-username',username));
+          NODE
+          USERNAME="$(cat /tmp/smoke-username)"
+          npx wrangler@4 d1 execute sphere --remote --command "SELECT id,username,role,status FROM users WHERE username='$USERNAME'"
