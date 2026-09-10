@@ -21,4 +21,5 @@ jobs:
         run: |
           cd worker
           npm install
-          npx wrangler@4 d1 execute sphere --remote --command "INSERT INTO users (id,email,username,password_hash,role,status,created_at,updated_at) VALUES ('d1-probe-${GITHUB_RUN_ID}','d1-probe-${GITHUB_RUN_ID}@example.invalid','d1probe${GITHUB_RUN_ID}','diagnostic-hash','USER','ACTIVE',datetime('now'),datetime('now')); DELETE FROM users WHERE id='d1-probe-${GITHUB_RUN_ID}';"
+          npx wrangler@4 d1 execute sphere --remote --command "INSERT INTO users (id,email,username,password_hash,role,status,created_at,updated_at) VALUES ('d1-probe-${GITHUB_RUN_ID}','d1-probe-${GITHUB_RUN_ID}@example.invalid','d1probe${GITHUB_RUN_ID}','diagnostic-hash','USER','ACTIVE',datetime('now'),datetime('now'))"
+          npx wrangler@4 d1 execute sphere --remote --command "DELETE FROM users WHERE id='d1-probe-${GITHUB_RUN_ID}'"
