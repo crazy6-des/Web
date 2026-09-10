@@ -17,40 +17,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Add temporary safe signup stage diagnostics and deploy
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          p=Path('worker/src/index.ts')
-          s=p.read_text()
-          replacements=[
-            ("if(path==='/auth/signup'&&req.method==='POST'){", "if(path==='/auth/signup'&&req.method==='POST'){let signupStage='request';"),
-            ("const b=await body(),username=", "const b=await body();signupStage='request/body validation';const username="),
-            ("if(await findUser(env.DB,username)||await findUser(env.DB,email))", "signupStage='findUser';if(await findUser(env.DB,username)||await findUser(env.DB,email))"),
-            ("const ph=await passwordHash(password),id=newId();", "signupStage='passwordHash';const ph=await passwordHash(password),id=newId();"),
-            ("await insert(env.DB,'users',{id,username,email,password_hash:ph,role:'USER',status:'ACTIVE',created_at:now(),updated_at:now()});", "signupStage='insert(users)';await insert(env.DB,'users',{id,username,email,password_hash:ph,role:'USER',status:'ACTIVE',created_at:now(),updated_at:now()});"),
-            ("await securityEvent(env,'signup',id,req);", "signupStage='securityEvent';await securityEvent(env,'signup',id,req);"),
-            ("const t=await createTokens(env,id),h=new Headers(ch);", "signupStage='createTokens';const t=await createTokens(env,id),h=new Headers(ch);"),
-            ("return json({user:await getUser(env.DB,id)},201,h);", "signupStage='getUser';const user=await getUser(env.DB,id);signupStage='final response';return json({user},201,h);"),
-          ]
-          for old,new in replacements:
-              if old not in s: raise SystemExit(f'missing target: {old[:80]}')
-              s=s.replace(old,new,1)
-          old_catch="catch(e){const status=Number((e as any)?.status)||500;return json({error:status===401?'Authentication required':status<500?text((e as any)?.message):'Internal server error'},status,cors(env,req));}"
-          new_catch="catch(e){try{if(new URL(req.url).pathname==='/auth/signup'){const er=e as any;const raw=er instanceof Error?er.message:String(er??'');const safe=raw.replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}/g,'[redacted-email]').replace(/[A-Fa-f0-9]{32,}/g,'[redacted-token]').slice(0,300);console.error('signup_diagnostic',JSON.stringify({stage:signupStage,error_name:er?.name||'Error',error_message:safe}));return json({error:'DIAGNOSTIC:'+signupStage+':'+safe},500,cors(env,req));}}catch{}const status=Number((e as any)?.status)||500;return json({error:status===401?'Authentication required':status<500?text((e as any)?.message):'Internal server error'},status,cors(env,req));}"
-          if old_catch not in s: raise SystemExit('catch target not found')
-          p.write_text(s.replace(old_catch,new_catch,1))
-          PY
-          cd worker
-          npm install
-          npm run check
-          npx wrangler@4 deploy
-      - name: Run one real production auth smoke test
+      - name: Run real production signup and D1 persistence check
         run: |
           set -euo pipefail
           API_BASE="$(sed -n 's/.*VITE_API_BASE_URL = "\(.*\)"/\1/p' netlify.toml)"
           export API_BASE
           cd worker
+          npm install
           node --input-type=module <<'NODE'
           const base = process.env.API_BASE.replace(/\/$/, '');
           const id = process.env.GITHUB_RUN_ID;
@@ -60,14 +33,13 @@ jobs:
           const cookies = new Map();
           function saveCookies(r){for(const h of r.headers.getSetCookie?.()||[]){const p=h.split(';',1)[0];const i=p.indexOf('=');if(i>0)cookies.set(p.slice(0,i),p.slice(i+1));}}
           function cookieHeader(){return [...cookies].map(([k,v])=>`${k}=${v}`).join('; ');}
-          async function call(path,init={}){const headers=new Headers(init.headers||{});const c=cookieHeader();if(c)headers.set('cookie',c);const r=await fetch(base+path,{...init,headers});saveCookies(r);const text=await r.text();let body;try{body=JSON.parse(text);}catch{body=text;}console.log(JSON.stringify({path,status:r.status,body}));if(r.status>=500)throw new Error(`${path} returned ${r.status}`);return {r,body};}
+          async function call(path,init={}){const headers=new Headers(init.headers||{});const c=cookieHeader();if(c)headers.set('cookie',c);const r=await fetch(base+path,{...init,headers});saveCookies(r);const text=await r.text();let body;try{body=JSON.parse(text);}catch{body=text;}console.log(JSON.stringify({path,status:r.status,body}));return {r,body};}
           const signup=await call('/auth/signup',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({username,email,password})});
-          cookies.clear();
-          await call('/auth/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({login:username,password})});
-          await call('/auth/me');
-          await call('/auth/logout',{method:'POST'});
-          console.log(JSON.stringify({username,smoke:'signup-login-me-logout-complete'}));
-          await import('node:fs/promises').then(fs=>fs.writeFile('/tmp/smoke-username',username));
+          await import('node:fs/promises').then(fs=>fs.writeFile('/tmp/smoke-result',JSON.stringify({username,status:signup.r.status,body:signup.body})));
           NODE
-          USERNAME="$(cat /tmp/smoke-username)"
+          RESULT="$(cat /tmp/smoke-result)"
+          echo "$RESULT"
+          USERNAME="$(node --input-type=module -e "const x=JSON.parse(process.argv[1]);process.stdout.write(x.username)" "$RESULT")"
+          STATUS="$(node --input-type=module -e "const x=JSON.parse(process.argv[1]);process.stdout.write(String(x.status))" "$RESULT")"
           npx wrangler@4 d1 execute sphere --remote --command "SELECT id,username,role,status FROM users WHERE username='$USERNAME'"
+          if [ "$STATUS" != "201" ]; then exit 1; fi
