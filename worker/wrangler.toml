@@ -13,7 +13,3 @@ bucket_name = "spheresocial"
 
 [secrets]
 required = ["JWT_SECRET", "JWT_REFRESH_SECRET"]
-
-[vars]
-# Set FRONTEND_ORIGIN in Cloudflare when the Netlify site exists.
-# Do not put secrets in this file.
