@@ -4,6 +4,7 @@ import { api, ApiError, Message, Post, User } from './api';
 
 type Section='home'|'search'|'create'|'earn'|'wallet'|'profile'|'settings'|'notifications'|'messages';
 const nav=[['home','Home','⌂'],['search','Search','⌕'],['create','Create','+'],['earn','Earn','◇'],['wallet','Wallet','◫'],['profile','Profile','○']] as const;
+type Music={id?:string;title?:string;artist?:string;album?:string;provider?:string;external_url?:string};
 const base=()=>API_BASE;
 
 export default function App(){const [section,setSection]=useState<Section>('home');const[user,setUser]=useState<User|null>(null);const[messageTarget,setMessageTarget]=useState<User|null>(null);const[messageConversation,setMessageConversation]=useState('');const[loading,setLoading]=useState(true);useEffect(()=>{api.session().then(r=>setUser(r.user)).catch(()=>setUser(null)).finally(()=>setLoading(false));},[]);if(loading)return <div className="app-shell"><div className="loading">Loading Sphere…</div></div>;if(!user)return <Auth onAuth={setUser}/>;const go=(s:Section)=>setSection(s);const openMessages=(u:User,conversationId='')=>{setMessageTarget(u);setMessageConversation(conversationId);setSection('messages')};return <div className="app-shell"><header className="topbar"><button className="brand brand-button" onClick={()=>go('home')}>Sphere</button><div className="topbar-actions"><button aria-label="Notifications" onClick={()=>go('notifications')}>♡</button><button aria-label="Messages" onClick={()=>go('messages')}>✉</button></div></header><main className="content">{section==='home'&&<Home user={user}/>}{section==='search'&&<Search onMessage={openMessages}/>} {section==='create'&&<Create onCreated={()=>go('home')}/>} {section==='earn'&&<Earn/>}{section==='wallet'&&<Wallet/>}{section==='profile'&&<Profile user={user} onLogout={()=>api.logout().finally(()=>setUser(null))} onUpdated={setUser} onSettings={()=>go('settings')}/>} {section==='settings'&&<Settings/>} {section==='notifications'&&<Notifications onOpenMessage={openMessages}/>} {section==='messages'&&<Messages targetUser={messageTarget} conversationId={messageConversation}/>}</main><nav className="bottom-nav" aria-label="Primary navigation">{nav.map(([id,label,icon])=><button key={id} className={section===id?'active':''} onClick={()=>go(id)}><span className="nav-icon">{icon}</span><span>{label}</span></button>)}</nav></div>}
@@ -121,7 +122,7 @@ function messageDate(value: unknown) {
     d = new Date(value < 1e12 ? value * 1000 : value);
   } else {
     const raw = String(value).trim();
-    if (/^\\d+$/.test(raw)) {
+    if (/^\d+$/.test(raw)) {
       const n = Number(raw);
       d = new Date(n < 1e12 ? n * 1000 : n);
     } else {
