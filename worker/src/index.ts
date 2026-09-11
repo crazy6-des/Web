@@ -140,6 +140,20 @@ if(path==='/withdrawals'&&req.method==='POST'){requireAuth(a);const b=await body
 if(path==='/admin/reports'&&req.method==='POST'){requireAuth(a);const b=await body(),target=text(b.target_id||b.post_id||b.user_id),reason=text(b.reason).trim().slice(0,1000);if(!target||!reason)return json({error:'Target and reason are required'},400,ch);await insert(env.DB,'reports',{id:newId(),reporter_id:a.user.id,user_id:b.user_id?target:undefined,target_id:target,post_id:b.post_id,user_id_reported:b.user_id,reason,status:'open',created_at:now()});return json({ok:true},201,ch);}
 if(path==='/admin/reports'&&req.method==='GET'){requireAuth(a);if(!await isAdmin(env,a.user.id))return json({error:'Forbidden'},403,ch);const r=await env.DB.prepare('SELECT * FROM reports ORDER BY created_at DESC LIMIT 100').all<Row>();return json({reports:r.results||[]},200,ch);}
 if(path==='/admin/moderate'&&req.method==='POST'){requireAuth(a);if(!await isAdmin(env,a.user.id))return json({error:'Forbidden'},403,ch);const b=await body(),target=text(b.target_id),action=text(b.action).trim().slice(0,100),reason=text(b.reason).trim().slice(0,1000);if(!target||!action)return json({error:'Target and action are required'},400,ch);await insert(env.DB,'moderation_actions',{id:newId(),admin_id:a.user.id,moderator_id:a.user.id,target_id:target,action,status:'applied',reason,created_at:now()});if(['ban','disable','suspend'].includes(action.toLowerCase())){const c=await columns(env.DB,'users'),ic=first(c,['id','user_id']),sc=first(c,['status','account_status']);if(ic&&sc)await update(env.DB,'users',`${ident(ic)}=?`,[target],{[sc]:action.toLowerCase(),updated_at:now()});}await securityEvent(env,'admin_moderation',a.user.id,req,{target,action});return json({ok:true},200,ch);}
+const musicStream=path.match(/^\/music\/stream\/([^/]+)$/);
+if(musicStream&&req.method==='GET'){
+  const id=decodeURIComponent(musicStream[1]);
+  if(!id)return new Response(null,{status:400,headers:cors(env,req)});
+  const u=new URL(`https://discoveryprovider.audius.co/v1/tracks/${encodeURIComponent(id)}/stream`);
+  u.searchParams.set('app_name','sphere_social_rewards');
+  const headers=new Headers();
+  const range=req.headers.get('Range');
+  if(range)headers.set('Range',range);
+  const upstream=await fetch(u.toString(),{headers});
+  const out=new Headers(cors(env,req));
+  for(const k of ['content-type','content-length','content-range','accept-ranges','cache-control']){const v=upstream.headers.get(k);if(v)out.set(k,v);}
+  return new Response(upstream.body,{status:upstream.status,headers:out});
+}
 if(path==='/music/search'&&req.method==='GET'){
 requireAuth(a);
 const q=text(url.searchParams.get('q')).trim();
