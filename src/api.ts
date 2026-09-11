@@ -7,7 +7,12 @@ let refreshing: Promise<unknown>|null=null;
 async function raw<T>(path:string,init:RequestInit={}):Promise<T>{
   const headers=new Headers(init.headers);
   if(init.body&&!(init.body instanceof FormData))headers.set('content-type','application/json');
-  const r=await fetch(`${API_BASE}${path}`,{...init,headers,credentials:'include'});
+  let r:Response;
+  try {
+    r=await fetch(`${API_BASE}${path}`,{...init,headers,credentials:'include'});
+  } catch {
+    throw new ApiError(`Unable to reach Sphere API at ${API_BASE}`,0);
+  }
   const type=r.headers.get('content-type')||'';
   const data=type.includes('application/json')?await r.json():await r.text();
   if(!r.ok)throw new ApiError(typeof data==='object'&&data?.error?data.error:'Request failed',r.status);
@@ -24,10 +29,20 @@ async function request<T>(path:string,init:RequestInit={},retry=true):Promise<T>
   }
 }
 
+async function sessionRequest():Promise<{user:User|null}>{
+  try{return await raw<{user:User|null}>("/auth/session");}
+  catch(e){
+    if(!(e instanceof ApiError))throw e;
+    if(e.status!==401)throw e;
+    try{await raw<{user:User|null}>("/auth/refresh",{method:'POST'});return await raw<{user:User|null}>("/auth/session");}
+    catch(refreshError){throw refreshError instanceof ApiError&&refreshError.status===401?e:refreshError;}
+  }
+}
+
 function normalizePost(p:Post):Post{return {...p,liked:Boolean(p.hasLiked??p.liked),like_count:Number(p.likesCount??p.like_count??0),comment_count:Number(p.commentsCount??p.comment_count??0),created_at:Number(p.createdAt??p.created_at??Date.now()),image_url:p.imageUrl??p.image_url}}
 
 export const api={
-  session:async()=>{const r=await request<{user:User|null}>("/auth/session");if(!r.user)throw new ApiError('Not authenticated',401);return {user:r.user}},
+  session:async()=>{const r=await sessionRequest();if(!r.user)throw new ApiError('Not authenticated',401);return {user:r.user}},
   signup:async(i:{username:string;email:string;password:string;displayName?:string})=>{const r=await request<{user:User}>("/auth/signup",{method:'POST',body:JSON.stringify({username:i.username,email:i.email,password:i.password,displayName:i.displayName})});return {user:r.user}},
   login:async(i:{email?:string;username?:string;password:string})=>{const r=await request<{user:User}>("/auth/login",{method:'POST',body:JSON.stringify({email:i.email,username:i.username,password:i.password})});return {user:r.user}},
   logout:async()=>{try{return await request<{ok:true}>("/auth/logout",{method:'POST'})}catch(e){if(e instanceof ApiError&&e.status===401)return {ok:true};throw e}},
