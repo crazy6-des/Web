@@ -1,0 +1,9 @@
+import {useState} from 'react';
+import {User} from './api';
+import {Home} from './SocialHome';
+import {Explore,Create} from './ExploreCreate';
+import {ProfilePage,Settings} from './ProfileSettings';
+import {Activity,Messages} from './ActivityMessages';
+import './sphere-finish.css';
+type Page='home'|'explore'|'create'|'profile'|'settings'|'activity'|'messages';
+export default function SphereFinish({user,onLogout}:{user:User;onLogout:()=>void}){const[p,setP]=useState<Page>('home'),[target,setTarget]=useState<User|null>(null),[cid,setCid]=useState('');const open=(u:User,c='')=>{setTarget(u);setCid(c);setP('messages')};return <div className="sf"><header><button className="logo" onClick={()=>{setP('home');setTarget(null)}}><b>S</b> Sphere</button><div className="head-actions"><button onClick={()=>setP('explore')}>⌕</button><button onClick={()=>setP('activity')}>♡</button><button onClick={()=>setP('messages')}>✉</button></div></header><main>{p==='home'&&<Home user={user} profile={u=>{setTarget(u);setP('profile')}} message={open}/>} {p==='explore'&&<Explore user={user} profile={u=>{setTarget(u);setP('profile')}} message={open}/>} {p==='create'&&<Create done={()=>setP('home')}/>} {p==='profile'&&<ProfilePage user={target||user} me={user} back={()=>setP('home')} message={open} settings={()=>setP('settings')} logout={onLogout}/>} {p==='settings'&&<Settings back={()=>setP('profile')}/>} {p==='activity'&&<Activity message={open}/>} {p==='messages'&&<Messages me={user} target={target} cid={cid} open={open}/>}</main><nav>{[['home','⌂'],['explore','⌕'],['create','＋'],['messages','✉'],['profile','○']].map(([x,i])=><button className={p===x?'on':''} key={x} onClick={()=>{if(x==='profile')setTarget(null);setP(x as Page)}}><i>{i}</i><span>{x==='home'?'Home':x==='explore'?'Explore':x==='create'?'Create':x==='messages'?'Messages':'Profile'}</span></button>)}</nav></div>}
