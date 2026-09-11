@@ -114,4 +114,109 @@ function Wallet(){const[data,setData]=useState<{wallet:Record<string,unknown>|nu
 function Profile({user,onLogout,onUpdated,onSettings}:{user:User;onLogout:()=>void;onUpdated:(u:User)=>void;onSettings:()=>void}){const[bio,setBio]=useState(user.bio||'');const[username,setUsername]=useState(user.username);const[busy,setBusy]=useState(false);async function save(){setBusy(true);try{const r=await api.updateProfile({bio,username});onUpdated(r.user)}catch(e){alert(e instanceof Error?e.message:'Unable to update profile')}finally{setBusy(false)}}return <section><Heading eyebrow="Account" title="Profile"><button className="quiet-button" onClick={onLogout}>Log out</button></Heading><div className="profile-head"><div className="avatar large">{user.username[0]?.toUpperCase()}</div><div><h2>@{user.username}</h2><p className="muted">{user.email}</p></div></div><div className="composer"><label>Username<input value={username} onChange={e=>setUsername(e.target.value)}/></label><label>Bio<textarea value={bio} onChange={e=>setBio(e.target.value)} maxLength={500}/></label><button className="primary" onClick={save} disabled={busy}>{busy?'Saving…':'Save profile'}</button><button className="quiet-button full" onClick={onSettings}>Settings & privacy</button></div></section>}
 function Settings(){const[settings,setSettings]=useState<Record<string,unknown>>({});const[busy,setBusy]=useState(true);useEffect(()=>{api.settings().then(r=>setSettings(r.settings)).finally(()=>setBusy(false))},[]);async function toggle(key:string){const next=!Boolean(settings[key]);setSettings(s=>({...s,[key]:next}));try{await api.updateSettings({[key]:next})}catch{setSettings(s=>({...s,[key]:!next}))}}return <section><Heading eyebrow="Account" title="Settings"/>{busy?<Empty title="Loading settings"/>:<div className="settings-list"><label className="setting"><span><strong>Allow messages</strong><small>Let other users start conversations with you.</small></span><input type="checkbox" checked={Boolean(settings.allow_messages??true)} onChange={()=>toggle('allow_messages')}/></label><label className="setting"><span><strong>Private account</strong><small>Keep privacy state controlled by the server.</small></span><input type="checkbox" checked={Boolean(settings.private_account)} onChange={()=>toggle('private_account')}/></label></div>}</section>}
 function Notifications({onOpenMessage}:{onOpenMessage:(u:User,conversationId?:string)=>void}){const[data,setData]=useState<unknown[]|null>(null);useEffect(()=>{api.notifications().then(r=>setData(r.notifications)).catch(()=>setData([]))},[]);async function open(n:any){if(n.id)api.readNotification(n.id).catch(()=>{});if(n.type==='message'&&n.actor_id){onOpenMessage({id:n.actor_id,username:n.actor_username||'User',email:''},n.entity_id||n.reference_id||'');}}return <section><Heading eyebrow="Activity" title="Notifications"/>{data===null?<Empty title="Loading notifications"/>:!data.length?<Empty title="You're all caught up" text="New follows, likes, comments and messages will appear here."/>:<div className="results">{data.map((n:any,i)=>{const clickable=n.type==='message'&&n.actor_id;return <div className="result" key={n.id||i} onClick={()=>clickable&&open(n)} role={clickable?'button':undefined} tabIndex={clickable?0:undefined}><strong>{n.type==='message'?(n.actor_username?`@${n.actor_username} sent you a message`:'New message'):(n.message||n.type||'Activity')}</strong><span className="muted">{n.created_at?new Date(n.created_at).toLocaleString():''}</span></div>})}</div>}</section>}
-function Messages({targetUser,conversationId}:{targetUser:User|null;conversationId?:string}){const[target,setTarget]=useState(targetUser?.id||'');const[conversation,setConversation]=useState(conversationId||'');const[messages,setMessages]=useState<Message[]>([]);const[textValue,setText]=useState('');const[busy,setBusy]=useState(false);useEffect(()=>{setTarget(targetUser?.id||'');setConversation(conversationId||'');setMessages([])},[targetUser?.id,conversationId]);useEffect(()=>{if(conversation)api.messages(conversation).then(r=>setMessages(r.messages)).catch(()=>{})},[conversation]);async function send(){if(!target||!textValue.trim())return;setBusy(true);try{const r=await api.sendMessage(target,textValue.trim());setConversation(r.conversation_id);setText('');const m=await api.messages(r.conversation_id);setMessages(m.messages)}catch(e){alert(e instanceof Error?e.message:'Unable to send message')}finally{setBusy(false)}}return <section><Heading eyebrow="Private" title="Messages"/><div className="composer">{targetUser?<p className="muted">Messaging <strong>@{targetUser.username}</strong></p>:<p className="muted">Choose a user from Search to start a conversation.</p>}{conversation&&<div className="message-list">{messages.map((m,i)=><div className="message" key={m.id||m.message_id||i}><strong>{m.sender_username?`@${m.sender_username}`:m.sender_id}</strong><span>{m.content||m.body}</span></div>)}</div>}<label>Message<textarea value={textValue} onChange={e=>setText(e.target.value)} maxLength={4000}/></label><button className="primary" onClick={send} disabled={busy||!target}>{busy?'Sending…':'Send message'}</button><p className="muted">Messaging is authorized by the Worker and respects the recipient's settings.</p></div></section>}
+function messageDate(value: unknown) {
+  if (value === null || value === undefined || value === '') return '';
+  let d: Date;
+  if (typeof value === 'number') {
+    d = new Date(value < 1e12 ? value * 1000 : value);
+  } else {
+    const raw = String(value).trim();
+    if (/^\\d+$/.test(raw)) {
+      const n = Number(raw);
+      d = new Date(n < 1e12 ? n * 1000 : n);
+    } else {
+      const normalized = raw.includes('T') ? raw : raw.replace(' ', 'T');
+      d = new Date(normalized.endsWith('Z') ? normalized : normalized + 'Z');
+    }
+  }
+  return Number.isNaN(d.getTime()) ? '' : d.toLocaleString([], {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit'
+  });
+}
+
+function Messages({targetUser,conversationId}:{targetUser:User|null;conversationId?:string}){
+  const[target,setTarget]=useState(targetUser?.id||'');
+  const[conversation,setConversation]=useState(conversationId||'');
+  const[messages,setMessages]=useState<Message[]>([]);
+  const[textValue,setText]=useState('');
+  const[busy,setBusy]=useState(false);
+  const[loadingHistory,setLoadingHistory]=useState(false);
+
+  useEffect(()=>{
+    setTarget(targetUser?.id||'');
+    setConversation(conversationId||'');
+    setMessages([]);
+  },[targetUser?.id,conversationId]);
+
+  useEffect(()=>{
+    if(!conversation)return;
+    setLoadingHistory(true);
+    api.messages(conversation)
+      .then(r=>setMessages(r.messages))
+      .catch(()=>setMessages([]))
+      .finally(()=>setLoadingHistory(false));
+  },[conversation]);
+
+  async function send(){
+    if(!target||!textValue.trim())return;
+    setBusy(true);
+    try{
+      const r=await api.sendMessage(target,textValue.trim());
+      setConversation(r.conversation_id);
+      setText('');
+      const m=await api.messages(r.conversation_id);
+      setMessages(m.messages);
+    }catch(e){
+      alert(e instanceof Error?e.message:'Unable to send message');
+    }finally{
+      setBusy(false);
+    }
+  }
+
+  return <section className="messages-screen">
+    <Heading eyebrow="Private" title={targetUser?`@${targetUser.username}`:'Messages'}/>
+    {!targetUser?
+      <Empty title="Choose a user to start a conversation" text="Search for someone and send them a message."/>
+    :
+      <>
+        <div className="message-list">
+          {loadingHistory?
+            <Empty title="Loading conversation…"/>
+          :
+            conversation && messages.length?
+              messages.map((m,i)=>{
+                const timestamp=messageDate(m.created_at||m.timestamp||m.createdAt);
+                return <div className="message" key={m.id||m.message_id||i}>
+                  <strong>{m.sender_username?`@${m.sender_username}`:m.sender_id||'User'}</strong>
+                  <span>{m.content||m.body||''}</span>
+                  {timestamp&&<small className="muted">{timestamp}</small>}
+                </div>
+              })
+            :
+              conversation?
+                <Empty title="No messages yet"/>
+              :
+                <Empty title="Start the conversation" text={`Send a message to @${targetUser.username}.`}/>
+          }
+        </div>
+
+        <div className="composer message-composer">
+          <label>Message
+            <textarea
+              value={textValue}
+              onChange={e=>setText(e.target.value)}
+              maxLength={4000}
+              placeholder={`Message @${targetUser.username}…`}
+            />
+          </label>
+          <button className="primary" onClick={send} disabled={busy||!target||!textValue.trim()}>
+            {busy?'Sending…':'Send'}
+          </button>
+        </div>
+      </>
+    }
+  </section>
+}
