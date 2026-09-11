@@ -2,6 +2,9 @@ name = "sphere-api"
 main = "src/index.ts"
 compatibility_date = "2026-09-09"
 
+[vars]
+FRONTEND_ORIGIN = "https://famous-alfajores-46f9fa.netlify.app"
+
 [[d1_databases]]
 binding = "DB"
 database_name = "sphere"
