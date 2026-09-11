@@ -11,9 +11,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ github.head_ref }}
       - name: Patch worker routes
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -34,5 +33,5 @@ jobs:
             git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
             git add worker/src/index.ts
             git commit -m 'fix: support message history and editing'
-            git push
+            git push origin HEAD:${{ github.head_ref }}
           fi
