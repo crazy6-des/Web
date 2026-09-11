@@ -1,5 +1,5 @@
 // Sphere API client — Cloudflare Worker / D1 / R2 contract bridge.
-export const API_BASE = String(import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
+export const API_BASE = String(import.meta.env.VITE_API_BASE_URL || 'https://sphere-api.binancecompany274.workers.dev').replace(/\/$/, '');
 
 export class ApiError extends Error { status:number; constructor(message:string,status:number){super(message);this.status=status;} }
 let refreshing: Promise<unknown>|null=null;
@@ -16,7 +16,7 @@ async function raw<T>(path:string,init:RequestInit={}):Promise<T>{
 
 async function request<T>(path:string,init:RequestInit={},retry=true):Promise<T>{
   try{return await raw<T>(path,init)}catch(e){
-    if(retry&&e instanceof ApiError&&e.status===401&&path!=='/auth/refresh'){
+    if(retry&&e instanceof ApiError&&e.status===401&&path!=='/auth/refresh'&&path!=='/auth/session'){
       if(!refreshing)refreshing=raw<{user:User|null}>("/auth/refresh",{method:'POST'}).finally(()=>{refreshing=null});
       try{await refreshing;return await raw<T>(path,init)}catch{}
     }
@@ -29,7 +29,7 @@ function normalizePost(p:Post):Post{return {...p,liked:Boolean(p.hasLiked??p.lik
 export const api={
   session:async()=>{const r=await request<{user:User|null}>("/auth/session");if(!r.user)throw new ApiError('Not authenticated',401);return {user:r.user}},
   signup:async(i:{username:string;email:string;password:string;displayName?:string})=>{const r=await request<{user:User}>("/auth/signup",{method:'POST',body:JSON.stringify({username:i.username,email:i.email,password:i.password,displayName:i.displayName})});return {user:r.user}},
-  login:async(i:{email?:string;username?:string;password:string})=>{const identifier=i.email||i.username||'';const r=await request<{user:User}>("/auth/login",{method:'POST',body:JSON.stringify({email:identifier,password:i.password})});return {user:r.user}},
+  login:async(i:{email?:string;username?:string;password:string})=>{const r=await request<{user:User}>("/auth/login",{method:'POST',body:JSON.stringify({email:i.email,username:i.username,password:i.password})});return {user:r.user}},
   logout:async()=>{try{return await request<{ok:true}>("/auth/logout",{method:'POST'})}catch(e){if(e instanceof ApiError&&e.status===401)return {ok:true};throw e}},
   forgotPassword:(email:string)=>request<{ok:true}>("/auth/forgot-password",{method:'POST',body:JSON.stringify({email})}),
   resetPassword:(token:string,password:string)=>request<{ok:true}>("/auth/reset-password",{method:'POST',body:JSON.stringify({token,password})}),
