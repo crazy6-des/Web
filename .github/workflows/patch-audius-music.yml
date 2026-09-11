@@ -1,0 +1,60 @@
+name: patch global Audius music source
+on:
+  push:
+    branches:
+      - feat/global-audius-music-source
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch Worker music search
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('worker/src/index.ts')
+          s = p.read_text()
+          anchor = "const tracks:any[]=[];"
+          block = r'''const tracks:any[]=[];
+          try{
+          const u=new URL('https://api.audius.co/v1/tracks/search');
+          u.searchParams.set('query',q);
+          u.searchParams.set('limit','15');
+          u.searchParams.set('sort_method','relevant');
+          u.searchParams.set('app_name','sphere_social_rewards');
+          const r=await fetch(u.toString(),{headers:{accept:'application/json'}});
+          if(r.ok){
+          const d=await r.json() as any;
+          for(const x of (d.data||[])){
+          const id=String(x.id||'');
+          const streamable=Boolean(x.is_streamable??x.isStreamable);
+          if(!id||!streamable)continue;
+          const user=x.user||{};
+          tracks.push({provider:'audius',id,title:x.title||'',artist:user.name||user.handle||'',album:'',artwork_url:x.artwork?.['150x150']||x.artwork?.['480x480']||'',duration_ms:Number(x.duration||0)*1000,external_url:x.permalink?`https://audius.co${x.permalink}`:`https://audius.co`,audio_url:`https://api.audius.co/v1/tracks/${encodeURIComponent(id)}/stream?app_name=sphere_social_rewards`,source_url:x.permalink?`https://audius.co${x.permalink}`:'',creator:user.name||user.handle||''});
+          }
+          }
+          }catch{}
+          '''
+          if anchor not in s:
+              raise SystemExit('music anchor not found')
+          if "api.audius.co/v1/tracks/search" in s:
+              raise SystemExit('Audius patch already present')
+          s=s.replace(anchor,block,1)
+          s=s.replace("return json({tracks:tracks.filter((x)=>x.title&&x.audio_url).slice(0,20)},200,ch);","return json({tracks:tracks.filter((x)=>x.title&&x.audio_url).slice(0,30)},200,ch);",1)
+          p.write_text(s)
+          PY
+      - name: Validate Worker
+        working-directory: worker
+        run: |
+          npm install
+          npm run check
+      - name: Commit patch and remove workflow
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add worker/src/index.ts
+          git rm .github/workflows/patch-audius-music.yml
+          git commit -m 'feat: add global Audius music source'
+          git push origin HEAD:feat/global-audius-music-source
