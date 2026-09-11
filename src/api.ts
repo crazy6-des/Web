@@ -40,6 +40,6 @@ export const api={
  earn:()=>request<{offers:unknown[]}>('/earn/offers')
 };
 export type User={id:string;username:string;email:string;avatar_url?:string|null;bio?:string|null;status?:string|null};
-export type Music={provider?:string;id?:string;title?:string;artist?:string;album?:string;artwork_url?:string;duration_ms?:number;external_url?:string};
+export type Music={provider?:string;id?:string;title?:string;artist?:string;album?:string;artwork_url?:string;duration_ms?:number;external_url?:string;audio_url?:string;source_url?:string;license?:string;license_url?:string;creator?:string};
 export type Post=Record<string,any>&{id?:string;post_id?:string;caption?:string;author?:User;media?:Record<string,any>|null;like_count?:number};
 export type Message=Record<string,any>&{id?:string;message_id?:string;content?:string;body?:string;sender_id?:string;sender_username?:string;created_at?:number};

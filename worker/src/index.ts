@@ -144,28 +144,31 @@ if(path==='/music/search'&&req.method==='GET'){
 requireAuth(a);
 const q=text(url.searchParams.get('q')).trim();
 if(q.length<2)return json({tracks:[]},200,ch);
+const tracks:any[]=[];
 try{
-const u=new URL(atob('aHR0cHM6Ly9pdHVuZXMuYXBwbGUuY29tL3NlYXJjaA=='));
+const u=new URL('https://itunes.apple.com/search');
 u.searchParams.set('term',q);
 u.searchParams.set('country','NG');
 u.searchParams.set('media','music');
 u.searchParams.set('entity','song');
 u.searchParams.set('limit','10');
 const r=await fetch(u.toString());
-if(!r.ok)return json({tracks:[]},200,ch);
+if(r.ok){
 const d=await r.json() as any;
-const tracks=(d.results||[]).map((x:any)=>({
-provider:'itunes',
-id:String(x.trackId||''),
-title:x.trackName||'',
-artist:x.artistName||'',
-album:x.collectionName||'',
-artwork_url:x.artworkUrl100||'',
-duration_ms:x.trackTimeMillis||0,
-external_url:x.trackViewUrl||''
-}));
-return json({tracks},200,ch);
-}catch{return json({tracks:[]},200,ch);}
+for(const x of (d.results||[]))tracks.push({provider:'itunes',id:String(x.trackId||''),title:x.trackName||'',artist:x.artistName||'',album:x.collectionName||'',artwork_url:x.artworkUrl100||'',duration_ms:x.trackTimeMillis||0,external_url:x.trackViewUrl||'',audio_url:x.previewUrl||'',source_url:x.trackViewUrl||''});
+}
+}catch{}
+try{
+const u=new URL('https://api.openverse.org/v1/audio/');
+u.searchParams.set('q',q);
+u.searchParams.set('page_size','10');
+const r=await fetch(u.toString(),{headers:{accept:'application/json'}});
+if(r.ok){
+const d=await r.json() as any;
+for(const x of (d.results||[]))tracks.push({provider:'openverse',id:String(x.id||x.identifier||''),title:x.title||'',artist:x.creator||'',album:'',artwork_url:x.thumbnail||'',duration_ms:Number(x.duration||0),external_url:x.foreign_landing_url||x.source_url||'',audio_url:x.url||'',source_url:x.foreign_landing_url||'',license:x.license||'',license_url:x.license_url||'',creator:x.creator||''});
+}
+}catch{}
+return json({tracks:tracks.filter((x)=>x.title&&x.audio_url).slice(0,20)},200,ch);
 }
 return json({error:'Not found'},404,ch);}
 export default {async fetch(req:Request,env:Env){try{return await handle(env,req);}catch(e){const status=Number((e as any)?.status)||500;return json({error:status===401?'Authentication required':status<500?text((e as any)?.message):'Internal server error'},status,cors(env,req));}}};
