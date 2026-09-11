@@ -1,0 +1,63 @@
+name: patch free music sources
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch music sources
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+
+          api = Path('src/api.ts')
+          s = api.read_text()
+          s = s.replace("export type Music={provider?:string;id?:string;title?:string;artist?:string;album?:string;artwork_url?:string;duration_ms?:number;external_url?:string};", "export type Music={provider?:string;id?:string;title?:string;artist?:string;album?:string;artwork_url?:string;duration_ms?:number;external_url?:string;audio_url?:string;source_url?:string;license?:string;license_url?:string;creator?:string};")
+          api.write_text(s)
+
+          app = Path('src/App.tsx')
+          s = app.read_text()
+          s = s.replace("type Music={id?:string;title?:string;artist?:string;album?:string;provider?:string;external_url?:string};", "type Music={id?:string;title?:string;artist?:string;album?:string;provider?:string;external_url?:string;audio_url?:string;source_url?:string;license?:string;license_url?:string;creator?:string};")
+          old = "const songTitle=post.song_title||post.music?.title||post.music_metadata?.title;const songArtist=post.song_artist||post.music?.artist||post.music_metadata?.artist;const songUrl=post.song_url||post.music?.external_url||post.music_metadata?.external_url;"
+          new = "const songTitle=post.song_title||post.music?.title||post.music_metadata?.title;const songArtist=post.song_artist||post.music?.artist||post.music_metadata?.artist;const songUrl=post.song_url||post.music?.audio_url||post.music?.external_url||post.music_metadata?.audio_url||post.music_metadata?.external_url;"
+          if old not in s: raise SystemExit('PostCard music anchor not found')
+          s = s.replace(old,new,1)
+          old = "<p className=\"muted\">Search is live and the selected track is saved with the post. For openly licensed audio, <a href=\"https://openverse.org/audio/\" target=\"_blank\" rel=\"noreferrer\">Openverse Audio</a> is an open media search source; verify each track's license.</p>"
+          new = "<p className=\"muted\">Search is live across iTunes previews and openly licensed Openverse audio. Openverse results include a playable source URL and license information; check the license before publishing.</p>"
+          if old not in s: raise SystemExit('music help anchor not found')
+          s = s.replace(old,new,1)
+          old = "{musicResults.length>0&&<div className=\"results music-results\">{musicResults.map((m:Music)=><button type=\"button\" className=\"result music-result\" key={m.id||`${m.title}-${m.artist}`} onClick={()=>{setMusic(`${m.title||''}${m.artist?` — ${m.artist}`:''}`);setSelectedMusic(m);setMusicResults([])}}><strong>{m.title||'Untitled'}</strong><span className=\"muted\">{m.artist||'Unknown artist'}{m.album?` · ${m.album}`:''}</span></button>)}</div>}"
+          new = "{musicResults.length>0&&<div className=\"results music-results\">{musicResults.map((m:Music)=><button type=\"button\" className=\"result music-result\" key={m.id||`${m.title}-${m.artist}`} onClick={()=>{setMusic(`${m.title||''}${m.artist?` — ${m.artist}`:''}`);setSelectedMusic(m);setMusicResults([])}}><strong>{m.title||'Untitled'}</strong><span className=\"muted\">{m.artist||'Unknown artist'}{m.album?` · ${m.album}`:''}{m.provider?` · ${m.provider}`:''}</span>{m.license&&<span className=\"muted\">{m.license}</span>}</button>)}</div>}"
+          if old not in s: raise SystemExit('music result anchor not found')
+          s = s.replace(old,new,1)
+          app.write_text(s)
+
+          worker = Path('worker/src/index.ts')
+          s = worker.read_text()
+          old = "if(path==='/music/search'&&req.method==='GET'){\nrequireAuth(a);\nconst q=text(url.searchParams.get('q')).trim();\nif(q.length<2)return json({tracks:[]},200,ch);\ntry{\nconst u=new URL(atob('aHR0cHM6Ly9pdHVuZXMuYXBwbGUuY29tL3NlYXJjaA=='));\nu.searchParams.set('term',q);\nu.searchParams.set('country','NG');\nu.searchParams.set('media','music');\nu.searchParams.set('entity','song');\nu.searchParams.set('limit','10');\nconst r=await fetch(u.toString());\nif(!r.ok)return json({tracks:[]},200,ch);\nconst d=await r.json() as any;\nconst tracks=(d.results||[]).map((x:any)=>({\nprovider:'itunes',\nid:String(x.trackId||''),\ntitle:x.trackName||'',\nartist:x.artistName||'',\nalbum:x.collectionName||'',\nartwork_url:x.artworkUrl100||'',\nduration_ms:x.trackTimeMillis||0,\nexternal_url:x.trackViewUrl||''\n}));\nreturn json({tracks},200,ch);\n}catch{return json({tracks:[]},200,ch);}\n}"
+          new = "if(path==='/music/search'&&req.method==='GET'){\nrequireAuth(a);\nconst q=text(url.searchParams.get('q')).trim();\nif(q.length<2)return json({tracks:[]},200,ch);\nconst tracks:any[]=[];\ntry{\nconst u=new URL('https://itunes.apple.com/search');\nu.searchParams.set('term',q);\nu.searchParams.set('country','NG');\nu.searchParams.set('media','music');\nu.searchParams.set('entity','song');\nu.searchParams.set('limit','10');\nconst r=await fetch(u.toString());\nif(r.ok){\nconst d=await r.json() as any;\nfor(const x of (d.results||[]))tracks.push({provider:'itunes',id:String(x.trackId||''),title:x.trackName||'',artist:x.artistName||'',album:x.collectionName||'',artwork_url:x.artworkUrl100||'',duration_ms:x.trackTimeMillis||0,external_url:x.trackViewUrl||'',audio_url:x.previewUrl||'',source_url:x.trackViewUrl||''});\n}\n}catch{}\ntry{\nconst u=new URL('https://api.openverse.org/v1/audio/');\nu.searchParams.set('q',q);\nu.searchParams.set('page_size','10');\nconst r=await fetch(u.toString(),{headers:{accept:'application/json'}});\nif(r.ok){\nconst d=await r.json() as any;\nfor(const x of (d.results||[]))tracks.push({provider:'openverse',id:String(x.id||x.identifier||''),title:x.title||'',artist:x.creator||'',album:'',artwork_url:x.thumbnail||'',duration_ms:Number(x.duration||0),external_url:x.foreign_landing_url||x.source_url||'',audio_url:x.url||'',source_url:x.foreign_landing_url||'',license:x.license||'',license_url:x.license_url||'',creator:x.creator||''});\n}\n}catch{}\nreturn json({tracks:tracks.filter((x)=>x.title&&x.audio_url).slice(0,20)},200,ch);\n}"
+          if old not in s: raise SystemExit('music route anchor not found')
+          s = s.replace(old,new,1)
+          worker.write_text(s)
+      - name: Validate
+        run: |
+          npm ci
+          npm run check
+          npm run build
+          cd worker
+          npm ci
+          npm run check
+      - name: Commit and remove patch workflow
+        shell: bash
+        run: |
+          rm .github/workflows/patch-free-music.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/api.ts src/App.tsx worker/src/index.ts .github/workflows/patch-free-music.yml
+          git diff --cached --quiet && exit 0
+          git commit -m "fix: add live open music sources"
+          git push origin HEAD
