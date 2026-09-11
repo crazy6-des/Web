@@ -12,7 +12,7 @@ function Root() {
     api.session().then(r => setUser(r.user)).catch(() => setUser(null)).finally(() => setReady(true));
   }, []);
   if (!ready) return <div className="app-shell"><div className="loading"><span className="loading-mark">S</span><span>Loading Sphere</span></div></div>;
-  return user ? <SphereFinish user={user} onLogout={() => api.logout().finally(() => setUser(null))} /> : <Landing onAuthenticated={(u: User) => setUser(u)} />;
+  return user ? <SphereFinish user={user} onLogout={() => api.logout().finally(() => setUser(null))} /> : <Landing onAuthenticated={() => api.session().then(r => setUser(r.user))} />;
 }
 
 createRoot(document.getElementById('root')!).render(<StrictMode><Root /></StrictMode>);
