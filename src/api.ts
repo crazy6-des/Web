@@ -1,6 +1,40 @@
-const BASE=import.meta.env.VITE_API_BASE_URL||'';
-async function request<T>(path:string,init:RequestInit={}){const r=await fetch(`${BASE}${path}`,{...init,credentials:'include',headers:{...(init.body instanceof FormData?{}:{'content-type':'application/json'}),...(init.headers||{})}});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||`Request failed (${r.status})`);return d as T;}
+// Sphere API client — Cloudflare Worker / D1 / R2 contract bridge.
+export const API_BASE = String(import.meta.env.VITE_API_BASE_URL || 'https://sphere-api.binancecompany274.workers.dev').replace(/\/$/, '');
+export class ApiError extends Error { status:number; constructor(message:string,status:number){super(message);this.status=status;} }
+let refreshing: Promise<unknown>|null=null;
+async function raw<T>(path:string,init:RequestInit={}):Promise<T>{const headers=new Headers(init.headers);if(init.body&&!(init.body instanceof FormData))headers.set('content-type','application/json');let r:Response;try{r=await fetch(`${API_BASE}${path}`,{...init,headers,credentials:'include'});}catch{throw new ApiError(`Unable to reach Sphere API at ${API_BASE}`,0)}const type=r.headers.get('content-type')||'';const data=type.includes('application/json')?await r.json():await r.text();if(!r.ok)throw new ApiError(typeof data==='object'&&data?.error?data.error:'Request failed',r.status);return data as T;}
+async function request<T>(path:string,init:RequestInit={},retry=true):Promise<T>{try{return await raw<T>(path,init)}catch(e){if(retry&&e instanceof ApiError&&e.status===401&&path!=='/auth/refresh'&&path!=='/auth/session'){if(!refreshing)refreshing=raw<{user:User|null}>("/auth/refresh",{method:'POST'}).finally(()=>{refreshing=null});try{await refreshing;return await raw<T>(path,init)}catch{}}throw e;}}
+async function sessionRequest():Promise<{user:User|null}>{try{return await raw<{user:User|null}>("/auth/session")}catch(e){if(!(e instanceof ApiError)||e.status!==401)throw e;try{await raw<{user:User|null}>("/auth/refresh",{method:'POST'});return await raw<{user:User|null}>("/auth/session")}catch(refreshError){throw refreshError instanceof ApiError&&refreshError.status===401?e:refreshError}}}
+function normalizePost(p:Post):Post{return {...p,liked:Boolean(p.hasLiked??p.liked),like_count:Number(p.likesCount??p.like_count??0),comment_count:Number(p.commentsCount??p.comment_count??0),created_at:Number(p.createdAt??p.created_at??Date.now()),image_url:p.imageUrl??p.image_url}}
 export const api={
+ session:async()=>{const r=await sessionRequest();if(!r.user)throw new ApiError('Not authenticated',401);return {user:r.user}},
+ signup:async(i:{username:string;email:string;password:string;displayName?:string})=>{const r=await request<{user:User}>("/auth/signup",{method:'POST',body:JSON.stringify({username:i.username,email:i.email,password:i.password,displayName:i.displayName})});return {user:r.user}},
+ login:async(i:{email?:string;username?:string;password:string})=>{const r=await request<{user:User}>("/auth/login",{method:'POST',body:JSON.stringify({email:i.email,username:i.username,password:i.password})});return {user:r.user}},
+ logout:async()=>{try{return await request<{ok:true}>("/auth/logout",{method:'POST'})}catch(e){if(e instanceof ApiError&&e.status===401)return {ok:true};throw e}},
+ forgotPassword:(email:string)=>request<{ok:true}>("/auth/forgot-password",{method:'POST',body:JSON.stringify({email})}),
+ resetPassword:(token:string,password:string)=>request<{ok:true}>("/auth/reset-password",{method:'POST',body:JSON.stringify({token,password})}),
+ me:()=>request<{user:User}>("/me").then(r=>({user:r.user})),
+ updateProfile:async(input:Partial<Pick<User,'username'|'bio'|'avatar_url'>>)=>{const body:any={};if(input.username!==undefined)body.username=input.username;if(input.bio!==undefined)body.bio=input.bio;if(input.avatar_url!==undefined)body.avatar_url=input.avatar_url;const r=await request<{user:User}>("/me",{method:'PATCH',body:JSON.stringify(body)});return {user:r.user}},
+ profile:(username:string)=>request<{profile:Profile}>(`/users/${encodeURIComponent(username)}`).then(r=>r),
+ posts:async(limit=20,offset=0,feed:'forYou'|'following'|'trending'='forYou')=>{const r=await request<{posts:Post[];page:number;hasMore:boolean}>(`/feed?limit=${limit}&offset=${offset}&feed=${encodeURIComponent(feed)}`);return {...r,posts:(r.posts||[]).map(normalizePost)}},
+ post:async(id:string)=>{const r=await request<{post:Post}>(`/posts/${encodeURIComponent(id)}`);return {post:normalizePost(r.post)}},
+ like:async(id:string)=>{const r=await request<{liked:boolean}>(`/posts/${encodeURIComponent(id)}/like`,{method:'POST'});const p=await api.post(id);return {liked:Boolean(r.liked),saved:Boolean(p.post.saved),likesCount:Number(p.post.like_count||0)}},
+ save:async(id:string)=>{const r=await request<{saved:boolean}>(`/posts/${encodeURIComponent(id)}/save`,{method:'POST'});const p=await api.post(id);return {saved:Boolean(r.saved),liked:Boolean(p.post.liked)}},
+ repost:(id:string)=>request<{reposted:boolean;post_id:string}>(`/posts/${encodeURIComponent(id)}/repost`,{method:'POST'}),
+ deletePost:(id:string)=>request<{ok:true}>(`/posts/${encodeURIComponent(id)}`,{method:'DELETE'}),
+ comment:(id:string,content:string,parent_id?:string)=>request<{comment_id:string}>(`/posts/${encodeURIComponent(id)}/comments`,{method:'POST',body:JSON.stringify({content,parent_id})}).then(r=>({comment_id:r.comment_id,comment:{id:r.comment_id,content}} as any)),
+ comments:(id:string)=>request<{comments:Comment[]}>(`/posts/${encodeURIComponent(id)}/comments`),
+ commentLike:(id:string)=>request<{liked:boolean}>(`/comments/${encodeURIComponent(id)}/like`,{method:'POST'}),
+ deleteComment:(id:string)=>request<{ok:true}>(`/comments/${encodeURIComponent(id)}/delete`,{method:'POST'}),
+ follow:async(user_id:string)=>{const r=await request<{following:boolean;pending?:boolean}>(`/follows`,{method:'POST',body:JSON.stringify({user_id})});return {following:Boolean(r.following),pending:Boolean(r.pending)}},
+ notifications:async()=>{const r=await request<{notifications:NotificationItem[];unreadCount?:number}>("/notifications");return {notifications:r.notifications||[],unreadCount:Number(r.unreadCount||0)}},
+ readNotification:(id:string)=>request<{ok:true}>(`/notifications/${encodeURIComponent(id)}/read`,{method:'POST'}),
+ readAllNotifications:()=>request<{ok:true}>("/notifications/read-all",{method:'POST'}),
+ search:async(q:string,limit=20)=>{const r=await request<{users:User[];posts:Post[]}>(`/search?q=${encodeURIComponent(q)}&limit=${limit}`);return {...r,posts:(r.posts||[]).map(normalizePost)}},
+ settings:async()=>request<{settings:Record<string,unknown>}>("/settings"),
+ updateSettings:async(settings:Record<string,unknown>)=>{const r=await request<{ok:true}>("/settings",{method:'PATCH',body:JSON.stringify(settings)});return {ok:r.ok,settings}},
+ block:(user_id:string)=>request<{active:boolean}>("/blocks",{method:'POST',body:JSON.stringify({user_id})}),
+ mute:(user_id:string)=>request<{active:boolean}>("/mutes",{method:'POST',body:JSON.stringify({user_id})}),
  uploadImage:async(file:File)=>{const f=new FormData();f.append('file',file);return await request<{key:string}>("/upload/image",{method:'POST',body:f})},
  createPost:async(i:{caption:string;music?:Music;imageKey?:string})=>{const r=await request<{post_id:string}>("/posts",{method:'POST',body:JSON.stringify({caption:i.caption,music:i.music,imageKey:i.imageKey})});return {post_id:r.post_id,post:{id:r.post_id} as Post}},
  musicSearch:(q:string)=>request<{tracks:Music[]}>(`/music/search?q=${encodeURIComponent(q)}`),
@@ -19,4 +53,6 @@ export type Profile={id:string;username:string;displayName?:string;bio?:string|n
 export type Music={provider?:string;id?:string;title?:string;artist?:string;album?:string;artwork_url?:string;duration_ms?:number;external_url?:string;audio_url?:string;source_url?:string;license?:string;license_url?:string;creator?:string};
 export type Post=Record<string,any>&{id?:string;post_id?:string;caption?:string;author?:User;media?:Record<string,any>|null;imageUrl?:string;image_url?:string;likesCount?:number;like_count?:number;commentsCount?:number;comment_count?:number;hasLiked?:boolean;liked?:boolean;saved?:boolean;createdAt?:number;created_at?:number};
 export type Comment=Record<string,any>&{id:string;postId?:string;userId?:string;author?:User;content?:string;createdAt?:number;created_at?:number;liked?:boolean;like_count?:number};
+export type NotificationItem={id:string;type:string;read:boolean;createdAt:number;actor:User;postId?:string|null;commentId?:string|null;post?:{caption:string;imageUrl:string}|null};
+export type Message=Record<string,any>&{id?:string;message_id?:string;content?:string;body?:string;sender_id?:string;sender_username?:string;created_at?:number};
 export type ConversationSummary={conversation_id:string;user:User;lastMessage:string;lastAt:number;unread:number};
