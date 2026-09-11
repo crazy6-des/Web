@@ -42,11 +42,11 @@ jobs:
           worker.write_text(s)
       - name: Validate
         run: |
-          npm ci
+          npm install
           npm run check
           npm run build
           cd worker
-          npm ci
+          npm install
           npm run check
       - name: Commit and remove patch workflow
         shell: bash
