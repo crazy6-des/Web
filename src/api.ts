@@ -30,7 +30,9 @@ export const api={
  uploadImage:(file:File)=>{const f=new FormData();f.append('file',file);return request<{key:string}>('/upload/image',{method:'POST',body:f});},
  createPost:(i:{caption:string;music?:Music;imageKey:string})=>request<{post_id:string}>('/posts',{method:'POST',body:JSON.stringify(i)}), musicSearch:(q:string)=>request<{tracks:Music[]}>(`/music/search?q=${encodeURIComponent(q)}`),
  messages:(conversation_id:string)=>request<{messages:Message[]}>(`/messages?conversation_id=${encodeURIComponent(conversation_id)}`),
+ conversationWith:(user_id:string)=>request<{conversation_id:string|null}>(`/messages/with?user_id=${encodeURIComponent(user_id)}`),
  sendMessage:(recipient_id:string,content:string)=>request<{conversation_id:string;message_id:string}>('/messages',{method:'POST',body:JSON.stringify({recipient_id,content})}),
+ editMessage:(message_id:string,content:string)=>request<{ok:true}>(`/messages/${encodeURIComponent(message_id)}`,{method:'PATCH',body:JSON.stringify({content})}),
  readMessages:(conversation_id:string)=>request<{ok:true}>(`/messages/${encodeURIComponent(conversation_id)}/read`,{method:'POST'}),
  wallet:()=>request<{wallet:Record<string,unknown>|null;transactions:unknown[]}>('/wallet'),
  withdraw:(input:{amount:number;provider:'paystack'|'paypal';destination:string})=>request<{status:string}>('/withdrawals',{method:'POST',body:JSON.stringify(input)}),
@@ -39,4 +41,4 @@ export const api={
 export type User={id:string;username:string;email:string;avatar_url?:string|null;bio?:string|null;status?:string|null};
 export type Music={provider?:string;id?:string;title?:string;artist?:string;album?:string;artwork_url?:string;duration_ms?:number;external_url?:string};
 export type Post=Record<string,any>&{id?:string;post_id?:string;caption?:string;author?:User;media?:Record<string,any>|null;like_count?:number};
-export type Message=Record<string,any>&{id?:string;message_id?:string;content?:string;body?:string;sender_id?:string;created_at?:number};
+export type Message=Record<string,any>&{id?:string;message_id?:string;content?:string;body?:string;sender_id?:string;sender_username?:string;created_at?:number};
