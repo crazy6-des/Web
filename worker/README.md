@@ -5,7 +5,7 @@ This is the production Cloudflare Worker API for Sphere Social & Rewards.
 ## Existing production bindings
 
 - `DB` → D1 database `sphere`
-- `R2` → R2 bucket `sphere socials`
+- `R2` → R2 bucket `spheresocial`
 
 The Wrangler configuration maps the existing D1 database ID `4de71dc8-fd19-44c2-994f-e5c0dbbf4dc2` to `DB` and the existing R2 bucket `spheresocial` to `R2`.
 
@@ -38,7 +38,7 @@ The backend has inactive-by-default provider boundaries for:
 
 Offerwall rewards are accepted only through signed, timestamped postbacks with rate limiting and event-idempotency. Wallet credits and withdrawals are ledger-backed and use the existing D1 tables. No provider is simulated and no provider secret belongs in GitHub.
 
-Paystack withdrawals expect a real Paystack recipient code. Stripe withdrawals expect a real Stripe Connect account ID (`acct_...`). Provider calls remain inactive until the corresponding production secret is configured.
+Paystack withdrawals require a real Paystack recipient code, a unique/idempotent withdrawal reference, and verified provider lifecycle callbacks. `PAYSTACK_WEBHOOK_CONFIGURED=true` is intentionally not configured by this foundation branch; payout calls therefore fail closed until the webhook route and reconciliation are actually wired and verified. Stripe remains a reserved provider boundary until its transfer lifecycle/webhook reconciliation is implemented.
 
 ## Deploying the Worker
 
