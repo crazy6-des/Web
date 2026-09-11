@@ -321,3 +321,7 @@ h2 { font-size: 19px; letter-spacing: -.025em; }
 .music-result .muted { text-align:right; }
 .music-selected { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 12px; border:1px solid #29292f; border-radius:9px; background:#111114; color:#dddde2; font-size:13px; }
 @media (max-width:560px){.message-compose-actions{gap:6px}.message-image{max-width:240px;max-height:300px}.music-result{grid-template-columns:1fr;gap:3px}.music-result .muted{text-align:left}}
+
+.music-line { margin: 12px 0 4px; }
+.music-meta { margin-bottom: 8px; font-weight: 600; }
+.post-music-player { display: block; width: 100%; max-width: 520px; height: 42px; }
