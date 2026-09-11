@@ -1,4 +1,5 @@
 const base = (process.env.SPHERE_API_BASE || 'https://sphere-api.binancecompany274.workers.dev').replace(/\/$/, '');
+const frontendOrigin = process.env.SPHERE_FRONTEND_ORIGIN || 'https://famous-alfajores-46f9fa.netlify.app';
 const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 const email = `smoke-${stamp}@example.invalid`;
 const username = `smoke_${stamp}`.replace(/[^a-z0-9_]/g, '').slice(0, 28);
@@ -24,6 +25,20 @@ async function request(path, init = {}) {
 const health = await request('/health', { headers: {} });
 if (!health.response.ok) throw new Error(`health failed: HTTP ${health.response.status} ${JSON.stringify(health.body)}`);
 
+const cors = await fetch(`${base}/auth/session`, {
+  method: 'OPTIONS',
+  headers: {
+    Origin: frontendOrigin,
+    'Access-Control-Request-Method': 'GET',
+    'Access-Control-Request-Headers': 'content-type',
+  },
+});
+const allowOrigin = cors.headers.get('access-control-allow-origin');
+const allowCredentials = cors.headers.get('access-control-allow-credentials');
+if (!cors.ok || allowOrigin !== frontendOrigin || allowCredentials !== 'true') {
+  throw new Error(`CORS failed: HTTP ${cors.status} allow-origin=${JSON.stringify(allowOrigin)} allow-credentials=${JSON.stringify(allowCredentials)}`);
+}
+
 const signup = await request('/auth/signup', {
   method: 'POST',
   body: JSON.stringify({ email, username, password }),
@@ -47,8 +62,9 @@ if (!session.response.ok || session.body?.user?.id !== userId) {
 console.log(JSON.stringify({
   ok: true,
   worker: base,
+  frontendOrigin,
   userId,
   username,
-  checks: ['health', 'signup-201', 'auth-cookies', 'session-roundtrip'],
+  checks: ['health', 'cors-preflight', 'signup-201', 'auth-cookies', 'session-roundtrip'],
   cleanup: { userId },
 }, null, 2));
