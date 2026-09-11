@@ -122,7 +122,7 @@ function messageDate(value: unknown) {
     d = new Date(value < 1e12 ? value * 1000 : value);
   } else {
     const raw = String(value).trim();
-    if (/^\d+$/.test(raw)) {
+    if (/^\\d+$/.test(raw)) {
       const n = Number(raw);
       d = new Date(n < 1e12 ? n * 1000 : n);
     } else {
