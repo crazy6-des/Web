@@ -45,7 +45,9 @@ export const api={
   commentLike:(id:string)=>request<{data:{liked:boolean}}>(`/comments/${encodeURIComponent(id)}/like`,{method:'POST'}).then(r=>r.data),
   deleteComment:(id:string)=>request<{ok:true}>(`/comments/${encodeURIComponent(id)}/delete`,{method:'POST'}),
   follow:async(user_id:string)=>{const r=await request<{data:{isFollowing:boolean}}>(`/users/${encodeURIComponent(user_id)}/follow`,{method:'POST'});return {following:r.data.isFollowing,pending:false}},
-  notifications:()=>Promise.resolve({notifications:[] as unknown[]}), readNotification:async(id:string)=>({ok:true as const}), readAllNotifications:async()=>({ok:true as const}),
+  notifications:async()=>{const r=await request<{success:boolean;data:{notifications:NotificationItem[];unreadCount:number}}>("/notifications");return r.data},
+  readNotification:(id:string)=>request<{ok:true}>(`/notifications/${encodeURIComponent(id)}/read`,{method:'POST'}),
+  readAllNotifications:()=>request<{ok:true}>("/notifications/read-all",{method:'POST'}),
   search:async(q:string,limit=20)=>{const r=await request<{data:{users:User[];posts:Post[]}}>(`/search?q=${encodeURIComponent(q)}&limit=${limit}`);return {...r.data,posts:r.data.posts.map(normalizePost)}},
   settings:async()=>{const r=await request<{data:{settings:Record<string,unknown>}}>("/users/me/settings");return r.data},
   updateSettings:async(settings:Record<string,unknown>)=>{const r=await request<{data:{settings:Record<string,unknown>}}>("/users/me/settings",{method:'PUT',body:JSON.stringify(settings)});return {ok:true as const,settings:r.data.settings}},
@@ -68,4 +70,5 @@ export type Profile={id:string;username:string;displayName?:string;bio?:string;a
 export type Music={provider?:string;id?:string;title?:string;artist?:string;album?:string;artwork_url?:string;duration_ms?:number;external_url?:string;audio_url?:string;source_url?:string;license?:string;license_url?:string;creator?:string};
 export type Post=Record<string,any>&{id?:string;post_id?:string;caption?:string;author?:User;media?:Record<string,any>|null;imageUrl?:string;image_url?:string;likesCount?:number;like_count?:number;commentsCount?:number;comment_count?:number;hasLiked?:boolean;liked?:boolean;saved?:boolean;createdAt?:number;created_at?:number};
 export type Comment=Record<string,any>&{id:string;postId?:string;userId?:string;author?:User;content?:string;createdAt?:number;created_at?:number;liked?:boolean;like_count?:number};
+export type NotificationItem={id:string;type:string;read:boolean;createdAt:number;actor:User;postId?:string|null;commentId?:string|null;post?:{caption:string;imageUrl:string}|null};
 export type Message=Record<string,any>&{id?:string;message_id?:string;content?:string;body?:string;sender_id?:string;sender_username?:string;created_at?:number};
