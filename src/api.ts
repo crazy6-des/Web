@@ -1,3 +1,4 @@
+// Sphere API client — persisted messaging extensions only; existing auth and storage flow preserved.
 export const API_BASE = String(import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 export class ApiError extends Error { status:number; constructor(message:string,status:number){super(message);this.status=status;} }
 let refreshing: Promise<unknown>|null=null;
