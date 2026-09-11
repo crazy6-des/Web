@@ -3,7 +3,7 @@ main = "src/final.ts"
 compatibility_date = "2026-09-09"
 
 [vars]
-FRONTEND_ORIGIN = "https://famous-alfajores-46f9fa.netlify.app"
+FRONTEND_ORIGIN = "https://famous-alfajores-46f9fa.netlify.app,https://sphereis.netlify.app"
 
 [[d1_databases]]
 binding = "DB"
