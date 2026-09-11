@@ -1,24 +1,18 @@
 import { StrictMode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './styles.css';
-import App from './App';
+import SphereFinish from './SphereFinish';
 import Landing from './Landing';
-import { api } from './api';
+import { api, User } from './api';
 
 function Root() {
   const [ready, setReady] = useState(false);
-  const [authenticated, setAuthenticated] = useState(false);
-
+  const [user, setUser] = useState<User | null>(null);
   useEffect(() => {
-    api.session().then(() => setAuthenticated(true)).catch(() => setAuthenticated(false)).finally(() => setReady(true));
+    api.session().then(r => setUser(r.user)).catch(() => setUser(null)).finally(() => setReady(true));
   }, []);
-
   if (!ready) return <div className="app-shell"><div className="loading"><span className="loading-mark">S</span><span>Loading Sphere</span></div></div>;
-  return authenticated ? <App /> : <Landing onAuthenticated={() => setAuthenticated(true)} />;
+  return user ? <SphereFinish user={user} onLogout={() => api.logout().finally(() => setUser(null))} /> : <Landing onAuthenticated={setUser} />;
 }
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <Root />
-  </StrictMode>,
-);
+createRoot(document.getElementById('root')!).render(<StrictMode><Root /></StrictMode>);
