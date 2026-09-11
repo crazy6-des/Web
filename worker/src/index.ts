@@ -146,6 +146,25 @@ const q=text(url.searchParams.get('q')).trim();
 if(q.length<2)return json({tracks:[]},200,ch);
 const tracks:any[]=[];
 try{
+const u=new URL('https://api.audius.co/v1/tracks/search');
+u.searchParams.set('query',q);
+u.searchParams.set('limit','15');
+u.searchParams.set('sort_method','relevant');
+u.searchParams.set('app_name','sphere_social_rewards');
+const r=await fetch(u.toString(),{headers:{accept:'application/json'}});
+if(r.ok){
+const d=await r.json() as any;
+for(const x of (d.data||[])){
+const id=String(x.id||'');
+const streamable=Boolean(x.is_streamable??x.isStreamable);
+if(!id||!streamable)continue;
+const user=x.user||{};
+tracks.push({provider:'audius',id,title:x.title||'',artist:user.name||user.handle||'',album:'',artwork_url:x.artwork?.['150x150']||x.artwork?.['480x480']||'',duration_ms:Number(x.duration||0)*1000,external_url:x.permalink?`https://audius.co${x.permalink}`:`https://audius.co`,audio_url:`https://api.audius.co/v1/tracks/${encodeURIComponent(id)}/stream?app_name=sphere_social_rewards`,source_url:x.permalink?`https://audius.co${x.permalink}`:'',creator:user.name||user.handle||''});
+}
+}
+}catch{}
+
+try{
 const u=new URL('https://itunes.apple.com/search');
 u.searchParams.set('term',q);
 u.searchParams.set('country','NG');
@@ -168,7 +187,7 @@ const d=await r.json() as any;
 for(const x of (d.results||[]))tracks.push({provider:'openverse',id:String(x.id||x.identifier||''),title:x.title||'',artist:x.creator||'',album:'',artwork_url:x.thumbnail||'',duration_ms:Number(x.duration||0),external_url:x.foreign_landing_url||x.source_url||'',audio_url:x.url||'',source_url:x.foreign_landing_url||'',license:x.license||'',license_url:x.license_url||'',creator:x.creator||''});
 }
 }catch{}
-return json({tracks:tracks.filter((x)=>x.title&&x.audio_url).slice(0,20)},200,ch);
+return json({tracks:tracks.filter((x)=>x.title&&x.audio_url).slice(0,30)},200,ch);
 }
 return json({error:'Not found'},404,ch);}
 export default {async fetch(req:Request,env:Env){try{return await handle(env,req);}catch(e){const status=Number((e as any)?.status)||500;return json({error:status===401?'Authentication required':status<500?text((e as any)?.message):'Internal server error'},status,cors(env,req));}}};
