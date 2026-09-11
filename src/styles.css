@@ -305,3 +305,20 @@ h2 { font-size: 19px; letter-spacing: -.025em; }
   .content { padding-top: 42px; }
   .message-composer { bottom: 18px; }
 }
+
+.message-composer label > textarea { display:block; }
+.message-compose-actions { display:flex; align-items:center; justify-content:flex-end; gap:8px; }
+.message-image { display:block; width:auto; max-width:min(280px,100%); max-height:360px; object-fit:contain; border-radius:10px; border:1px solid #29292f; background:#09090b; }
+.message-mine { align-self:flex-end; border-radius:14px 14px 5px 14px; }
+.message-selected { border-color:#66666e; box-shadow:0 0 0 1px #66666e; }
+.message-toolbar { display:flex; align-items:center; justify-content:space-between; gap:10px; min-height:42px; margin-bottom:8px; padding:8px 0; border-bottom:1px solid #202025; }
+.message-edit-actions { display:flex; align-items:center; gap:8px; }
+.message-edit-box { display:grid; gap:7px; margin-bottom:10px; padding:10px; border:1px solid #2a2a30; border-radius:10px; background:#111114; }
+.message-edit-box textarea { min-height:72px; }
+.music-picker { display:grid; gap:8px; }
+.music-status { min-height:18px; }
+.music-results { max-height:280px; overflow-y:auto; }
+.music-result { display:grid; grid-template-columns:1fr auto; align-items:center; gap:12px; }
+.music-result .muted { text-align:right; }
+.music-selected { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 12px; border:1px solid #29292f; border-radius:9px; background:#111114; color:#dddde2; font-size:13px; }
+@media (max-width:560px){.message-compose-actions{gap:6px}.message-image{max-width:240px;max-height:300px}.music-result{grid-template-columns:1fr;gap:3px}.music-result .muted{text-align:left}}
