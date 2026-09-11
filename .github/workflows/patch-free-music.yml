@@ -1,6 +1,7 @@
 name: patch free music sources
 on:
-  workflow_dispatch:
+  push:
+    branches: [feat/live-free-music-sources]
 permissions:
   contents: write
 jobs:
@@ -12,13 +13,10 @@ jobs:
         shell: python
         run: |
           from pathlib import Path
-          import re
-
           api = Path('src/api.ts')
           s = api.read_text()
           s = s.replace("export type Music={provider?:string;id?:string;title?:string;artist?:string;album?:string;artwork_url?:string;duration_ms?:number;external_url?:string};", "export type Music={provider?:string;id?:string;title?:string;artist?:string;album?:string;artwork_url?:string;duration_ms?:number;external_url?:string;audio_url?:string;source_url?:string;license?:string;license_url?:string;creator?:string};")
           api.write_text(s)
-
           app = Path('src/App.tsx')
           s = app.read_text()
           s = s.replace("type Music={id?:string;title?:string;artist?:string;album?:string;provider?:string;external_url?:string};", "type Music={id?:string;title?:string;artist?:string;album?:string;provider?:string;external_url?:string;audio_url?:string;source_url?:string;license?:string;license_url?:string;creator?:string};")
@@ -35,7 +33,6 @@ jobs:
           if old not in s: raise SystemExit('music result anchor not found')
           s = s.replace(old,new,1)
           app.write_text(s)
-
           worker = Path('worker/src/index.ts')
           s = worker.read_text()
           old = "if(path==='/music/search'&&req.method==='GET'){\nrequireAuth(a);\nconst q=text(url.searchParams.get('q')).trim();\nif(q.length<2)return json({tracks:[]},200,ch);\ntry{\nconst u=new URL(atob('aHR0cHM6Ly9pdHVuZXMuYXBwbGUuY29tL3NlYXJjaA=='));\nu.searchParams.set('term',q);\nu.searchParams.set('country','NG');\nu.searchParams.set('media','music');\nu.searchParams.set('entity','song');\nu.searchParams.set('limit','10');\nconst r=await fetch(u.toString());\nif(!r.ok)return json({tracks:[]},200,ch);\nconst d=await r.json() as any;\nconst tracks=(d.results||[]).map((x:any)=>({\nprovider:'itunes',\nid:String(x.trackId||''),\ntitle:x.trackName||'',\nartist:x.artistName||'',\nalbum:x.collectionName||'',\nartwork_url:x.artworkUrl100||'',\nduration_ms:x.trackTimeMillis||0,\nexternal_url:x.trackViewUrl||''\n}));\nreturn json({tracks},200,ch);\n}catch{return json({tracks:[]},200,ch);}\n}"
