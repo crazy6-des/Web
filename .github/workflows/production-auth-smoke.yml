@@ -1,0 +1,43 @@
+name: production auth smoke
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'worker/scripts/production-auth-smoke.mjs'
+      - '.github/workflows/production-auth-smoke.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      SPHERE_API_BASE: https://sphere-api.binancecompany274.workers.dev
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run production auth smoke test
+        id: smoke
+        run: |
+          set -euo pipefail
+          node worker/scripts/production-auth-smoke.mjs | tee smoke-result.json
+          node -e "const x=require('./smoke-result.json'); require('fs').writeFileSync('smoke-user-id.txt', x.userId)"
+      - name: Clean up disposable D1 account
+        if: always() && steps.smoke.outcome == 'success'
+        run: |
+          set -euo pipefail
+          USER_ID=$(cat smoke-user-id.txt)
+          cat > cleanup.sql <<SQL
+          DELETE FROM user_sessions WHERE user_id = '$USER_ID';
+          DELETE FROM security_events WHERE user_id = '$USER_ID';
+          DELETE FROM user_settings WHERE user_id = '$USER_ID';
+          DELETE FROM users WHERE id = '$USER_ID';
+          SQL
+          npx wrangler@4 d1 execute sphere --remote --file=cleanup.sql --config worker/wrangler.toml
