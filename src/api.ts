@@ -1,6 +1,5 @@
 // Sphere API client — Cloudflare Worker / D1 / R2 contract bridge.
 export const API_BASE = String(import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
-const API_PREFIX = '/api';
 
 export class ApiError extends Error { status:number; constructor(message:string,status:number){super(message);this.status=status;} }
 let refreshing: Promise<unknown>|null=null;
@@ -8,7 +7,7 @@ let refreshing: Promise<unknown>|null=null;
 async function raw<T>(path:string,init:RequestInit={}):Promise<T>{
   const headers=new Headers(init.headers);
   if(init.body&&!(init.body instanceof FormData))headers.set('content-type','application/json');
-  const r=await fetch(`${API_BASE}${API_PREFIX}${path}`,{...init,headers,credentials:'include'});
+  const r=await fetch(`${API_BASE}${path}`,{...init,headers,credentials:'include'});
   const type=r.headers.get('content-type')||'';
   const data=type.includes('application/json')?await r.json():await r.text();
   if(!r.ok)throw new ApiError(typeof data==='object'&&data?.error?data.error:'Request failed',r.status);
