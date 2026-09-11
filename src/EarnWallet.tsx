@@ -1,0 +1,28 @@
+import {useEffect,useMemo,useState} from 'react';
+import {api} from './api';
+
+type EarnData={offers:Record<string,any>[]};
+type WalletData={wallet:Record<string,any>|null;transactions:Record<string,any>[]};
+
+const money=(v:any,currency='NGN')=>new Intl.NumberFormat('en-NG',{style:'currency',currency,maximumFractionDigits:2}).format(Number(v||0));
+const label=(v:any)=>String(v||'').replaceAll('_',' ').replace(/\b\w/g,m=>m.toUpperCase());
+const amount=(r:any)=>Number(r.amount??r.reward_amount??r.payout??0);
+
+export function EarnWallet(){
+ const [wallet,setWallet]=useState<WalletData|null>(null),[offers,setOffers]=useState<Record<string,any>[]>([]),[loading,setLoading]=useState(true),[error,setError]=useState(''),[provider,setProvider]=useState<'paystack'|'stripe'>('paystack'),[withdrawAmount,setWithdrawAmount]=useState(''),[destination,setDestination]=useState(''),[busy,setBusy]=useState(false),[notice,setNotice]=useState('');
+ const load=async()=>{setError('');try{const [w,e]=await Promise.all([api.wallet(),api.earn()]);setWallet(w);setOffers((e.offers||[]) as Record<string,any>[]);}catch(e){setError(e instanceof Error?e.message:'Unable to load Earn');}finally{setLoading(false);}};
+ useEffect(()=>{load();},[]);
+ const balance=useMemo(()=>Number(wallet?.wallet?.available_balance??wallet?.wallet?.balance_available??wallet?.wallet?.balance??0),[wallet]);
+ const pending=Number(wallet?.wallet?.pending_balance??wallet?.wallet?.balance_pending??0);
+ const withdraw=async()=>{const n=Number(withdrawAmount);if(!Number.isInteger(n)||n<=0){setNotice('Enter a valid whole-number amount.');return;}if(n>balance){setNotice('Amount exceeds your available balance.');return;}if(!destination.trim()){setNotice(provider==='paystack'?'Enter the Paystack recipient code.':'Enter the Stripe connected-account ID.');return;}setBusy(true);setNotice('');try{await api.withdraw({amount:n,provider,destination:destination.trim()});setWithdrawAmount('');setDestination('');setNotice('Withdrawal submitted and reserved.');await load();}catch(e){setNotice(e instanceof Error?e.message:'Withdrawal could not be submitted.');}finally{setBusy(false);}};
+ if(loading)return <section className="earn-page"><div className="skeleton"/> </section>;
+ return <section className="earn-page">
+  <div className="title"><div><small>Wallet & Rewards</small><h1>Earn</h1></div></div>
+  {error&&<div className="earn-alert">{error}</div>}
+  <section className="wallet-card"><div><small>Available</small><strong>{money(balance)}</strong></div><div className="wallet-mini"><span>Pending</span><b>{money(pending)}</b></div><div className="wallet-mini"><span>Currency</span><b>{String(wallet?.wallet?.currency||'NGN').toUpperCase()}</b></div></section>
+  <section className="earn-panel"><div className="panel-head"><div><small>Withdraw</small><h2>Move your earned balance</h2></div></div><div className="provider-tabs"><button className={provider==='paystack'?'on':''} onClick={()=>setProvider('paystack')}>Paystack</button><button className={provider==='stripe'?'on':''} onClick={()=>setProvider('stripe')}>Stripe</button></div><div className="withdraw-grid"><input inputMode="numeric" value={withdrawAmount} onChange={e=>setWithdrawAmount(e.target.value)} placeholder="Amount in NGN"/><input value={destination} onChange={e=>setDestination(e.target.value)} placeholder={provider==='paystack'?'Paystack recipient code':'Stripe connected account ID'}/><button className="primary" disabled={busy} onClick={withdraw}>{busy?'Submitting…':'Withdraw'}</button></div>{notice&&<p className="earn-note">{notice}</p>}<p className="earn-note">Provider payouts only activate when the corresponding production credentials and recipient configuration are present. No simulated money is shown.</p></section>
+  <section className="earn-panel"><div className="panel-head"><div><small>Earn</small><h2>Available opportunities</h2></div></div><div className="offer-scroll">{offers.length?offers.map((o,i)=><article className="offer" key={String(o.id??o.offer_id??i)}><div className="offer-main"><b>{String(o.title??o.name??'Reward opportunity')}</b><span>{String(o.provider??o.provider_name??'Offerwall')}</span><small>{label(o.type??o.category??'survey')} · {label(o.status??'active')}</small></div><strong>{money(amount(o))}</strong></article>):<div className="empty"><b>◎</b><h2>No live offers</h2><p>Offers appear here only after a real provider publishes an active opportunity. Nothing is fabricated.</p></div>}</div></section>
+  <section className="earn-panel"><div className="panel-head"><div><small>History</small><h2>Wallet activity</h2></div></div><div className="history-scroll">{wallet?.transactions?.length?wallet.transactions.map((t,i)=><div className="history-row" key={String(t.id??t.transaction_id??i)}><span><b>{label(t.type??t.transaction_type??t.status)}</b><small>{t.created_at?new Date(Number(t.created_at)*1000).toLocaleString():label(t.state??t.status)}</small></span><strong className={String(t.direction||'credit').toLowerCase()==='debit'?'debit':''}>{String(t.direction||'credit').toLowerCase()==='debit'?'-':'+'}{money(t.amount)}</strong></div>):<div className="empty compact"><h2>No transactions yet</h2><p>Your real reward and withdrawal ledger will appear here.</p></div>}</div></section>
+  <section className="ad-reserve"><div><small>Partner inventory</small><h2>Ad integration space</h2><p>Five production-ready slots reserved for future ad partners. Empty until a verified network is connected.</p></div>{[1,2,3,4,5].map(n=><div className="ad-slot" key={n}><span>AD SLOT {n}</span><small>Reserved · no placeholder content</small></div>)}</section>
+ </section>;
+}

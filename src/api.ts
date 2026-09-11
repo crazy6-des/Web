@@ -18,11 +18,11 @@ export const api={
  profile:(username:string)=>request<{profile:Profile}>(`/users/${encodeURIComponent(username)}`).then(r=>r),
  posts:async(limit=20,offset=0,feed:'forYou'|'following'|'trending'='forYou')=>{const r=await request<{posts:Post[];page:number;hasMore:boolean}>(`/feed?limit=${limit}&offset=${offset}&feed=${encodeURIComponent(feed)}`);return {...r,posts:(r.posts||[]).map(normalizePost)}},
  post:async(id:string)=>{const r=await request<{post:Post}>(`/posts/${encodeURIComponent(id)}`);return {post:normalizePost(r.post)}},
- like:async(id:string)=>{const r=await request<{liked:boolean}>(`/posts/${encodeURIComponent(id)}/like`,{method:'POST'});const p=await api.post(id);return {liked:Boolean(r.liked),saved:Boolean(p.post.saved),likesCount:Number(p.post.like_count||0)}},
+ like:async(id:string)=>{const r=await request<{liked:boolean;likesCount?:number;like_count?:number}>(`/posts/${encodeURIComponent(id)}/like`,{method:'POST'});if(r.likesCount!==undefined||r.like_count!==undefined)return {liked:Boolean(r.liked),saved:false,likesCount:Number(r.likesCount??r.like_count)};const p=await api.post(id);return {liked:Boolean(r.liked),saved:Boolean(p.post.saved),likesCount:Number(p.post.like_count||0)}},
  save:async(id:string)=>{const r=await request<{saved:boolean}>(`/posts/${encodeURIComponent(id)}/save`,{method:'POST'});const p=await api.post(id);return {saved:Boolean(r.saved),liked:Boolean(p.post.liked)}},
  repost:(id:string)=>request<{reposted:boolean;post_id:string}>(`/posts/${encodeURIComponent(id)}/repost`,{method:'POST'}),
  deletePost:(id:string)=>request<{ok:true}>(`/posts/${encodeURIComponent(id)}`,{method:'DELETE'}),
- comment:(id:string,content:string,parent_id?:string)=>request<{comment_id:string}>(`/posts/${encodeURIComponent(id)}/comments`,{method:'POST',body:JSON.stringify({content,parent_id})}).then(r=>({comment_id:r.comment_id,comment:{id:r.comment_id,content}} as any)),
+ comment:async(id:string,content:string,parent_id?:string)=>{const r=await request<{comment_id:string}>(`/posts/${encodeURIComponent(id)}/comments`,{method:'POST',body:JSON.stringify({content,parent_id})});return {comment_id:r.comment_id,comment:{id:r.comment_id,content}} as any},
  comments:(id:string)=>request<{comments:Comment[]}>(`/posts/${encodeURIComponent(id)}/comments`),
  commentLike:(id:string)=>request<{liked:boolean}>(`/comments/${encodeURIComponent(id)}/like`,{method:'POST'}),
  deleteComment:(id:string)=>request<{ok:true}>(`/comments/${encodeURIComponent(id)}/delete`,{method:'POST'}),
@@ -45,7 +45,7 @@ export const api={
  editMessage:(message_id:string,content:string)=>request<{ok:true}>(`/messages/${encodeURIComponent(message_id)}`,{method:'PATCH',body:JSON.stringify({content})}),
  readMessages:(conversation_id:string)=>request<{ok:true}>(`/messages/${encodeURIComponent(conversation_id)}/read`,{method:'POST'}),
  wallet:async()=>request<{wallet:Record<string,any>|null;transactions:any[]}>("/wallet"),
- withdraw:(input:{amount:number;provider:'paystack'|'paypal';destination:string})=>request<{status:string}>("/withdrawals",{method:'POST',body:JSON.stringify({amount:input.amount,provider:input.provider,destination:input.destination})}),
+ withdraw:(input:{amount:number;provider:'paystack'|'stripe';destination:string;idempotencyKey?:string})=>request<{status:string;reference?:string}>("/withdrawals",{method:'POST',headers:{'idempotency-key':input.idempotencyKey||crypto.randomUUID()},body:JSON.stringify({amount:input.amount,provider:input.provider,destination:input.destination})}),
  earn:async()=>request<{offers:unknown[]}>("/earn/offers"),
 };
 export type User={id:string;username:string;email:string;displayName?:string;bio?:string|null;avatar_url?:string|null;avatarUrl?:string|null;status?:string|null;createdAt?:number};
