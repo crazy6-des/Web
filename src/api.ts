@@ -19,7 +19,7 @@ export const api={
  posts:async(limit=20,offset=0,feed:'forYou'|'following'|'trending'='forYou')=>{const r=await request<{posts:Post[];page:number;hasMore:boolean}>(`/feed?limit=${limit}&offset=${offset}&feed=${encodeURIComponent(feed)}`);return {...r,posts:(r.posts||[]).map(normalizePost)}},
  post:async(id:string)=>{const r=await request<{post:Post}>(`/posts/${encodeURIComponent(id)}`);return {post:normalizePost(r.post)}},
  like:async(id:string)=>{const r=await request<{liked:boolean;likesCount?:number;like_count?:number}>(`/posts/${encodeURIComponent(id)}/like`,{method:'POST'});if(r.likesCount!==undefined||r.like_count!==undefined)return {liked:Boolean(r.liked),saved:false,likesCount:Number(r.likesCount??r.like_count)};const p=await api.post(id);return {liked:Boolean(r.liked),saved:Boolean(p.post.saved),likesCount:Number(p.post.like_count||0)}},
- save:async(id:string)=>{const r=await request<{saved:boolean}>(`/posts/${encodeURIComponent(id)}/save`,{method:'POST'});return {saved:Boolean(r.saved)}},
+ save:async(id:string)=>{const r=await request<{saved:boolean}>(`/posts/${encodeURIComponent(id)}/save`,{method:'POST'});const p=await api.post(id);return {saved:Boolean(r.saved),liked:Boolean(p.post.liked)}},
  repost:(id:string)=>request<{reposted:boolean;post_id:string}>(`/posts/${encodeURIComponent(id)}/repost`,{method:'POST'}),
  deletePost:(id:string)=>request<{ok:true}>(`/posts/${encodeURIComponent(id)}`,{method:'DELETE'}),
  comment:async(id:string,content:string,parent_id?:string)=>{const r=await request<{comment_id:string}>(`/posts/${encodeURIComponent(id)}/comments`,{method:'POST',body:JSON.stringify({content,parent_id})});return {comment_id:r.comment_id,comment:{id:r.comment_id,content}} as any},
