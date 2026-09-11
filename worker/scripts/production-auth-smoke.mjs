@@ -11,11 +11,10 @@ function cookieHeader(response) {
     .join('; ');
 }
 
-async function request(path, init = {}) {
-  const response = await fetch(`${base}${path}`, {
-    ...init,
-    headers: { 'content-type': 'application/json', ...(init.headers || {}) },
-  });
+async function request(path, init = {}, cookies = '') {
+  const headers = { 'content-type': 'application/json', ...(init.headers || {}) };
+  if (cookies) headers.cookie = cookies;
+  const response = await fetch(`${base}${path}`, { ...init, headers });
   const text = await response.text();
   let body;
   try { body = JSON.parse(text); } catch { body = { raw: text.slice(0, 500) }; }
@@ -43,20 +42,33 @@ const signup = await request('/auth/signup', {
   method: 'POST',
   body: JSON.stringify({ email, username, password }),
 });
-if (signup.response.status !== 201) {
-  throw new Error(`signup failed: HTTP ${signup.response.status} ${JSON.stringify(signup.body)}`);
-}
+if (signup.response.status !== 201) throw new Error(`signup failed: HTTP ${signup.response.status} ${JSON.stringify(signup.body)}`);
 const userId = signup.body?.user?.id;
 if (!userId) throw new Error(`signup returned no user id: ${JSON.stringify(signup.body)}`);
-
 const cookies = cookieHeader(signup.response);
 if (!cookies) throw new Error('signup returned no auth cookies');
 
-const session = await request('/auth/session', {
-  headers: { cookie: cookies },
-});
-if (!session.response.ok || session.body?.user?.id !== userId) {
-  throw new Error(`session persistence failed: HTTP ${session.response.status} ${JSON.stringify(session.body)}`);
+const session = await request('/auth/session', {}, cookies);
+if (!session.response.ok || session.body?.user?.id !== userId) throw new Error(`session persistence failed: HTTP ${session.response.status} ${JSON.stringify(session.body)}`);
+
+const getChecks = [
+  ['/me', body => body?.user?.id === userId],
+  ['/feed?limit=50&offset=0&feed=forYou', body => Array.isArray(body?.posts)],
+  ['/feed?limit=50&offset=0&feed=following', body => Array.isArray(body?.posts)],
+  ['/feed?limit=50&offset=0&feed=trending', body => Array.isArray(body?.posts)],
+  ['/posts?limit=50&offset=0', body => Array.isArray(body?.posts)],
+  ['/messages/inbox', body => Array.isArray(body?.conversations)],
+  ['/notifications', body => Array.isArray(body?.notifications)],
+  ['/wallet', body => Array.isArray(body?.transactions)],
+  ['/earn/offers', body => Array.isArray(body?.offers)],
+  ['/settings', body => body?.settings !== undefined],
+  ['/search?q=smoke&limit=5', body => Array.isArray(body?.users) && Array.isArray(body?.posts)],
+];
+for (const [path, valid] of getChecks) {
+  const result = await request(path, {}, cookies);
+  if (!result.response.ok || !valid(result.body)) {
+    throw new Error(`GET route failed: ${path} HTTP ${result.response.status} ${JSON.stringify(result.body)}`);
+  }
 }
 
 console.log(JSON.stringify({
@@ -65,6 +77,7 @@ console.log(JSON.stringify({
   frontendOrigin,
   userId,
   username,
-  checks: ['health', 'cors-preflight', 'signup-201', 'auth-cookies', 'session-roundtrip'],
+  checks: ['health', 'cors-preflight', 'signup-201', 'auth-cookies', 'session-roundtrip', 'authenticated-read-routes'],
+  authenticatedReadRoutes: getChecks.map(([path]) => path),
   cleanup: { userId },
 }, null, 2));
