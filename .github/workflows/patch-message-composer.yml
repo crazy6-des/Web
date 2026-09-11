@@ -1,0 +1,53 @@
+name: Patch message composer
+on:
+  push:
+    branches: [fix/message-composer-selection]
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply message composer fixes
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('src/App.tsx')
+          s=p.read_text()
+          old='const[imageBusy,setImageBusy]=useState(false);const[blockBusy,setBlockBusy]=useState(false);const[fileInputId]=useState(()=>`message-image-${Math.random().toString(36).slice(2)}`);'
+          new='const[imageBusy,setImageBusy]=useState(false);const[pendingImage,setPendingImage]=useState<File|null>(null);const[blockBusy,setBlockBusy]=useState(false);const[fileInputId]=useState(()=>`message-image-${Math.random().toString(36).slice(2)}`);'
+          if old not in s: raise SystemExit('image state anchor not found')
+          s=s.replace(old,new,1)
+          old='async function send(content=textValue){const value=content.trim();if(!target||!value||busy)return;setBusy(true);try{const r=await api.sendMessage(target,value);setConversation(r.conversation_id);setText(\'\');setSelectedId(null);await refresh(r.conversation_id)}catch(e){alert(e instanceof Error?e.message:\'Unable to send message\')}finally{setBusy(false)}}async function sendImage(file:File){if(!target||imageBusy)return;setImageBusy(true);try{const uploaded=await api.uploadImage(file);await send(`[sphere-image]${uploaded.key}`)}catch(e){alert(e instanceof Error?e.message:\'Unable to send image\')}finally{setImageBusy(false)}}'
+          new='async function send(content=textValue){const value=content.trim();if(!target||(!value&&!pendingImage)||busy||imageBusy)return;setBusy(true);try{let cid=conversation; if(value){const r=await api.sendMessage(target,value);cid=r.conversation_id;setConversation(cid);setText(\'\');setSelectedId(null)} if(pendingImage){setImageBusy(true);const uploaded=await api.uploadImage(pendingImage);const r=await api.sendMessage(target,`[sphere-image]${uploaded.key}`);cid=r.conversation_id;setConversation(cid);setPendingImage(null)} if(cid)await refresh(cid)}catch(e){alert(e instanceof Error?e.message:\'Unable to send message\')}finally{setImageBusy(false);setBusy(false)}}'
+          if old not in s: raise SystemExit('send anchor not found')
+          s=s.replace(old,new,1)
+          old='if(r.active){setText(\'\');setMessages([]);setConversation(\'\');setSelectedId(null);setEditing(false)}'
+          new='if(r.active){setText(\'\');setPendingImage(null);setMessages([]);setConversation(\'\');setSelectedId(null);setEditing(false)}'
+          if old not in s: raise SystemExit('block reset anchor not found')
+          s=s.replace(old,new,1)
+          old='<div className="message-compose-actions"><label htmlFor={fileInputId} className="quiet-button">{imageBusy?\'Uploading…\':\'Add image\'}</label><input id={fileInputId} type="file" accept="image/jpeg,image/png,image/webp,image/gif" hidden onChange={e=>{const f=e.target.files?.[0];if(f)sendImage(f);e.currentTarget.value=\'\'}}/><button className="primary" onClick={()=>send()} disabled={busy||!target||!textValue.trim()}>{busy?\'Sending…\':\'Send\'}</button></div>'
+          new='<div className="message-compose-actions"><label htmlFor={fileInputId} className="quiet-button">{pendingImage?`Image selected: ${pendingImage.name}`:\'Add image\'}</label><input id={fileInputId} type="file" accept="image/jpeg,image/png,image/webp,image/gif" hidden onChange={e=>{const f=e.target.files?.[0];if(f)setPendingImage(f);e.currentTarget.value=\'\'}}/>{pendingImage&&<button type="button" className="quiet-button" onClick={()=>setPendingImage(null)}>Remove</button>}<button className="primary" onClick={()=>send()} disabled={busy||imageBusy||!target||(!textValue.trim()&&!pendingImage)}>{busy||imageBusy?\'Sending…\':\'Send\'}</button></div>'
+          if old not in s: raise SystemExit('composer anchor not found')
+          s=s.replace(old,new,1)
+          p.write_text(s)
+          css=Path('src/styles.css')
+          c=css.read_text()
+          c=c.replace('.message-composer label > :first-child { display: none; }\n','')
+          css.write_text(c)
+          PY
+      - name: Commit patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/App.tsx src/styles.css
+          git diff --cached --quiet && exit 0
+          git commit -m "fix: make message composer interactive"
+          git push
+      - name: Remove temporary workflow
+        run: |
+          git rm .github/workflows/patch-message-composer.yml
+          git commit -m "chore: remove temporary patch workflow"
+          git push
