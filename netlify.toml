@@ -4,7 +4,7 @@
   publish = "dist"
 
 [build.environment]
-  VITE_API_BASE_URL = "https://sphere-api.binancecompany274.workers.dev"
+  VITE_API_BASE_URL = "https://sphere-api.1234ymarmu.workers.dev"
 
 [[redirects]]
   from = "/*"
