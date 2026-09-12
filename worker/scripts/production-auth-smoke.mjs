@@ -1,5 +1,5 @@
 const base = (process.env.SPHERE_API_BASE || 'https://sphere-api.binancecompany274.workers.dev').replace(/\/$/, '');
-const frontendOrigins = (process.env.SPHERE_FRONTEND_ORIGINS || 'https://spheres.com.ng,https://sphereis.netlify.app').split(',').map(v => v.trim()).filter(Boolean);
+const frontendOrigins = (process.env.SPHERE_FRONTEND_ORIGINS || 'https://www.spheres.com.ng,https://spheres.com.ng,https://sphereis.netlify.app').split(',').map(v => v.trim()).filter(Boolean);
 const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 const email = `smoke-${stamp}@example.invalid`;
 const username = `smoke_${stamp}`.replace(/[^a-z0-9_]/g, '').slice(0, 28);
