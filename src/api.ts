@@ -14,7 +14,7 @@ export const api={
  forgotPassword:(email:string)=>request<{ok:true}>("/auth/forgot-password",{method:'POST',body:JSON.stringify({email})}),
  resetPassword:(token:string,password:string)=>request<{ok:true}>("/auth/reset-password",{method:'POST',body:JSON.stringify({token,password})}),
  me:()=>request<{user:User}>("/me").then(r=>({user:r.user})),
- updateProfile:async(input:Partial<Pick<User,'username'|'bio'|'avatar_url'>>)=>{const body:any={};if(input.username!==undefined)body.username=input.username;if(input.bio!==undefined)body.bio=input.bio;if(input.avatar_url!==undefined)body.avatar_url=input.avatar_url;const r=await request<{user:User}>("/me",{method:'PATCH',body:JSON.stringify(body)});return {user:r.user}},
+ async updateProfile(input:{username?:string;bio?:string|null;avatar_url?:string|null;website_url?:string|null}){const body:any={};if(input.username!==undefined)body.username=input.username;if(input.bio!==undefined)body.bio=input.bio;if(input.avatar_url!==undefined)body.avatar_url=input.avatar_url;if(input.website_url!==undefined)body.website_url=input.website_url;const r=await request<{user:User}>("/me",{method:'PATCH',body:JSON.stringify(body)});return {user:r.user}},
  profile:(username:string)=>request<{profile:Profile}>(`/users/${encodeURIComponent(username)}`).then(r=>r),
  posts:async(limit=20,offset=0,feed:'forYou'|'following'|'trending'='forYou')=>{const r=await request<{posts:Post[];page:number;hasMore:boolean}>(`/feed?limit=${limit}&offset=${offset}&feed=${encodeURIComponent(feed)}`);return {...r,posts:(r.posts||[]).map(normalizePost)}},
  post:async(id:string)=>{const r=await request<{post:Post}>(`/posts/${encodeURIComponent(id)}`);return {post:normalizePost(r.post)}},
@@ -48,8 +48,8 @@ export const api={
  withdraw:(input:{amount:number;provider:'paystack'|'stripe';destination:string;idempotencyKey?:string})=>request<{status:string;reference?:string}>("/withdrawals",{method:'POST',headers:{'idempotency-key':input.idempotencyKey||crypto.randomUUID()},body:JSON.stringify({amount:input.amount,provider:input.provider,destination:input.destination})}),
  earn:async()=>request<{offers:unknown[]}>("/earn/offers"),
 };
-export type User={id:string;username:string;email:string;displayName?:string;bio?:string|null;avatar_url?:string|null;avatarUrl?:string|null;status?:string|null;createdAt?:number};
-export type Profile={id:string;username:string;displayName?:string;bio?:string|null;avatar_url?:string|null;avatarUrl?:string;postsCount:number;followersCount:number;followingCount:number;totalLikesReceived:number;isFollowing?:boolean};
+export type User={id:string;username:string;email:string;displayName?:string;bio?:string|null;avatar_url?:string|null;avatarUrl?:string|null;website_url?:string|null;website?:string|null;status?:string|null;createdAt?:number};
+export type Profile={id:string;username:string;displayName?:string;bio?:string|null;avatar_url?:string|null;avatarUrl?:string;website_url?:string|null;website?:string|null;postsCount:number;followersCount:number;followingCount:number;totalLikesReceived:number;isFollowing?:boolean};
 export type Music={provider?:string;id?:string;title?:string;artist?:string;album?:string;artwork_url?:string;duration_ms?:number;external_url?:string;audio_url?:string;source_url?:string;license?:string;license_url?:string;creator?:string};
 export type Post=Record<string,any>&{id?:string;post_id?:string;caption?:string;author?:User;media?:Record<string,any>|null;imageUrl?:string;image_url?:string;likesCount?:number;like_count?:number;commentsCount?:number;comment_count?:number;hasLiked?:boolean;liked?:boolean;saved?:boolean;createdAt?:number;created_at?:number};
 export type Comment=Record<string,any>&{id:string;postId?:string;userId?:string;author?:User;content?:string;createdAt?:number;created_at?:number;liked?:boolean;like_count?:number};
