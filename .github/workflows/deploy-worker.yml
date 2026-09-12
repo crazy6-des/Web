@@ -13,6 +13,8 @@ jobs:
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      SPHERE_API_BASE: https://sphere-api.binancecompany274.workers.dev
+      SPHERE_FRONTEND_ORIGINS: https://spheres.com.ng,https://sphereis.netlify.app
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -25,4 +27,7 @@ jobs:
         working-directory: worker
       - name: Deploy existing sphere-api
         run: npx wrangler@4 deploy
+        working-directory: worker
+      - name: Verify live API communication and CORS
+        run: node scripts/production-auth-smoke.mjs
         working-directory: worker
