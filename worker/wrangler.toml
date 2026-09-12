@@ -3,8 +3,10 @@ main = "src/final.ts"
 compatibility_date = "2026-09-09"
 
 [vars]
-# Canonical production frontend origin first; retain apex and Netlify fallback aliases.
-FRONTEND_ORIGIN = "https://www.spheres.com.ng,https://spheres.com.ng,https://sphereis.netlify.app"
+# Canonical production frontend origin. The www hostname redirects to this apex domain.
+FRONTEND_ORIGIN = "https://spheres.com.ng"
+# Additional browser origins that may legitimately load the same production frontend.
+FRONTEND_ORIGINS = "https://spheres.com.ng,https://sphereis.netlify.app"
 
 [[d1_databases]]
 binding = "DB"
