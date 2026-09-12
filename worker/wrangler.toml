@@ -3,7 +3,9 @@ main = "src/final.ts"
 compatibility_date = "2026-09-09"
 
 [vars]
-FRONTEND_ORIGIN = "https://sphereis.netlify.app"
+# Accept the canonical custom domain plus the Netlify fallback hostname.
+# www.spheres.ng.com redirects to the canonical spheres.com.ng domain.
+FRONTEND_ORIGIN = "https://spheres.com.ng,https://www.spheres.com.ng,https://sphereis.netlify.app"
 
 [[d1_databases]]
 binding = "DB"
