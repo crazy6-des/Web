@@ -45,7 +45,7 @@ export const api={
  editMessage:(message_id:string,content:string)=>request<{ok:true}>(`/messages/${encodeURIComponent(message_id)}`,{method:'PATCH',body:JSON.stringify({content})}),
  readMessages:(conversation_id:string)=>request<{ok:true}>(`/messages/${encodeURIComponent(conversation_id)}/read`,{method:'POST'}),
  wallet:async()=>request<{wallet:Record<string,any>|null;transactions:any[]}>("/wallet"),
- withdraw:(input:{amount:number;provider:'paystack'|'stripe';destination:string;idempotencyKey?:string})=>request<{status:string;reference?:string}>("/withdrawals",{method:'POST',headers:{'idempotency-key':input.idempotencyKey||crypto.randomUUID()},body:JSON.stringify({amount:input.amount,provider:input.provider,destination:input.destination})}),
+ withdraw:(input:{amount:number;provider:'paystack'|'paypal';destination:string;idempotencyKey?:string})=>request<{status:string;reference?:string}>("/withdrawals",{method:'POST',headers:{'idempotency-key':input.idempotencyKey||crypto.randomUUID()},body:JSON.stringify({amount:input.amount,provider:input.provider,destination:input.destination})}),
  earn:async()=>request<{offers:unknown[]}>("/earn/offers"),
 };
 export type User={id:string;username:string;email:string;displayName?:string;bio?:string|null;avatar_url?:string|null;avatarUrl?:string|null;website_url?:string|null;website?:string|null;status?:string|null;createdAt?:number};
