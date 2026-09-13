@@ -7,6 +7,8 @@ compatibility_date = "2026-09-09"
 FRONTEND_ORIGIN = "https://spheres.com.ng"
 # Additional browser origins that may legitimately load the same production frontend.
 FRONTEND_ORIGINS = "https://spheres.com.ng,https://sphereis.netlify.app"
+# Reward policy: provider gross payout is split 75% user / 25% platform.
+REWARD_USER_SHARE_PERCENT = "75"
 
 [[d1_databases]]
 binding = "DB"
