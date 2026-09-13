@@ -1,5 +1,5 @@
 name = "sphere-api"
-main = "src/final.ts"
+main = "src/entry.ts"
 compatibility_date = "2026-09-09"
 
 [vars]
