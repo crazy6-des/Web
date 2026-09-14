@@ -1,4 +1,4 @@
-name: production deploy diagnostic
+name: production deploy
 
 on:
   push:
@@ -18,7 +18,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Temporary D1 reward commit diagnostic
+      - name: Align reward status enum
         shell: bash
         run: |
           set -euo pipefail
@@ -26,18 +26,18 @@ jobs:
           from pathlib import Path
           p=Path('worker/src/rewards.ts')
           s=p.read_text()
-          old="catch{return {ok:false,status:409,error:'Reward event could not be committed'}}"
-          new="catch(e){return {ok:false,status:409,error:'Reward event could not be committed',diagnostic:e instanceof Error?e.message:String(e)}}"
-          if old not in s:
-              raise SystemExit('diagnostic patch target not found')
-          s=s.replace(old,new,1)
-          old_status="type:'credit',status:'approved',state:'approved'"
-          new_status="type:'credit',status:'APPROVED',state:'approved'"
-          if old_status not in s:
-              raise SystemExit('reward status enum patch target not found')
-          s=s.replace(old_status,new_status,1)
-          p.write_text(s)
+          old="type:'credit',status:'approved',state:'approved'"
+          new="type:'credit',status:'APPROVED',state:'approved'"
+          if old in s:
+              p.write_text(s.replace(old,new,1))
           PY
+          if ! git diff --quiet -- worker/src/rewards.ts; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git add worker/src/rewards.ts
+            git commit -m 'Align reward transaction status with D1 enum'
+            git push origin HEAD:main
+          fi
       - name: Ensure required Worker JWT secrets exist
         shell: bash
         run: |
