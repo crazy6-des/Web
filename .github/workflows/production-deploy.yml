@@ -38,6 +38,20 @@ jobs:
             git commit -m 'Align reward transaction status with D1 enum'
             git push origin HEAD:main
           fi
+      - name: Expose D1 reward commit error for controlled diagnosis
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('worker/src/rewards.ts')
+          s=p.read_text()
+          old="catch{return {ok:false,status:409,error:'Reward event could not be committed'}}"
+          new="catch(e){const detail=e instanceof Error?e.message:String(e);return {ok:false,status:409,error:`Reward event could not be committed: ${detail}`}}"
+          if old not in s:
+              raise SystemExit('diagnostic target not found')
+          p.write_text(s.replace(old,new,1))
+          PY
       - name: Ensure required Worker JWT secrets exist
         shell: bash
         run: |
