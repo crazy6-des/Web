@@ -107,7 +107,9 @@ async function handleCpagripIsolated(env: RewardEnv, req: Request) {
   const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
   const mac = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${timestamp}.${internal}`));
   const signature = btoa(String.fromCharCode(...new Uint8Array(mac))).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
-  const bridge = await base.fetch(new Request(new URL('/rewards/cpagrip/postback', req.url), { method: 'POST', headers: { 'content-type': 'application/json', 'x-sphere-timestamp': timestamp, 'x-sphere-signature': signature }, body: internal }), env);
+  const internalRequest = new Request(new URL('/rewards/cpagrip/postback', req.url), { method: 'POST', headers: { 'content-type': 'application/json', 'x-sphere-timestamp': timestamp, 'x-sphere-signature': signature }, body: internal });
+  const bridge = await handleRewards(env, internalRequest, (request, innerEnv) => base.fetch(request, innerEnv));
+  if (!bridge) return testJson({ success: false, error: 'CPAGrip reward bridge unavailable' }, 503, cors);
   const result = await bridge.json().catch(() => null);
   return testJson({ provider: 'cpagrip', ...((result && typeof result === 'object') ? result : { ok: bridge.ok }) }, bridge.status, cors);
 }
