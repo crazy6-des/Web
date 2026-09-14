@@ -63,10 +63,13 @@ async function normalizeCpaLeadRecipient(env: RewardEnv, req: Request) {
     const usernameCol = ['username', 'handle', 'name'].find((x) => names.has(x));
     if (!idCol) return req;
 
+    // User-facing usernames may be written as @name, while CPAlead tracking can
+    // return that exact value. Resolve both forms without changing the canonical ID.
+    const recipient = uid.startsWith('@') ? uid.slice(1) : uid;
     const clauses = [`"${idCol}"=?`];
     const args: unknown[] = [uid];
-    if (emailCol) { clauses.push(`lower("${emailCol}")=lower(?)`); args.push(uid); }
-    if (usernameCol) { clauses.push(`lower("${usernameCol}")=lower(?)`); args.push(uid); }
+    if (emailCol) { clauses.push(`lower("${emailCol}")=lower(?)`); args.push(recipient); }
+    if (usernameCol) { clauses.push(`lower("${usernameCol}")=lower(?)`); args.push(recipient); }
     const row = await env.DB.prepare(`SELECT "${idCol}" AS id FROM users WHERE ${clauses.join(' OR ')} LIMIT 1`).bind(...args).first<{ id?: unknown }>();
     const canonical = String(row?.id || '').trim();
     if (!canonical || canonical === uid) return req;
