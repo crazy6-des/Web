@@ -6,6 +6,7 @@ on:
   pull_request:
     branches: [main]
 
+# Keep CI and production deployment aligned with every main-branch push.
 jobs:
   frontend:
     runs-on: ubuntu-latest
