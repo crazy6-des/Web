@@ -18,7 +18,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Align reward status enums and CPAlead offer FK handling
+      - name: Align reward status enums, CPAlead offer FK, and wallet points fields
         shell: bash
         run: |
           set -euo pipefail
@@ -29,7 +29,8 @@ jobs:
           replacements={
             "type:'credit',status:'approved',state:'approved'":"type:'credit',status:'APPROVED',state:'approved'",
             "provider,provider_name:provider,event_type:'offerwall',user_id:userId,offer_id:offerId,status:'accepted',state:'accepted'":"provider,provider_name:provider,event_type:'offerwall',user_id:userId,offer_id:offerId,status:'APPROVED',state:'accepted'",
-            "const offerId=clean(b.offer_id||b.offerid||b.campaign_id)||undefined;":"const offerId=provider==='cpalead'?undefined:(clean(b.offer_id||b.offerid||b.campaign_id)||undefined);"
+            "const offerId=clean(b.offer_id||b.offerid||b.campaign_id)||undefined;":"const offerId=provider==='cpalead'?undefined:(clean(b.offer_id||b.offerid||b.campaign_id)||undefined);",
+            "wallet_id:wid,user_id:userId,type:'reward',transaction_type:'reward',direction:'credit',amount,balance_after:next":"wallet_id:wid,user_id:userId,type:'reward',transaction_type:'reward',direction:'credit',amount,amount_points:amount,balance_after:next"
           }
           for old,new in replacements.items():
               if old in s:
@@ -40,7 +41,7 @@ jobs:
             git config user.name 'github-actions[bot]'
             git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
             git add worker/src/rewards.ts
-            git commit -m 'Handle CPAlead external offer IDs without local FK'
+            git commit -m 'Fix wallet transaction points field for rewards'
             git push origin HEAD:main
           fi
       - name: Expose D1 reward commit error for controlled diagnosis
