@@ -9,6 +9,8 @@ FRONTEND_ORIGIN = "https://spheres.com.ng"
 FRONTEND_ORIGINS = "https://spheres.com.ng,https://sphereis.netlify.app"
 # Reward policy: provider gross payout is split 75% user / 25% platform.
 REWARD_USER_SHARE_PERCENT = "75"
+# Canonical hosted CPAlead/CDNFlyer reward wall. The Worker appends the authenticated Sphere user ID as subid.
+CPALEAD_OFFERWALL_URL = "https://www.cdnflyer.com/wall/vekoIu9"
 
 [[d1_databases]]
 binding = "DB"
