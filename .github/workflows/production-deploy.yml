@@ -5,7 +5,7 @@ on:
     branches: [main]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   deploy-worker:
@@ -18,6 +18,20 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Temporary D1 reward commit diagnostic
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('worker/src/rewards.ts')
+          s=p.read_text()
+          old="catch{return {ok:false,status:409,error:'Reward event could not be committed'}}"
+          new="catch(e){return {ok:false,status:409,error:'Reward event could not be committed',diagnostic:String(e?.message||e)}}"
+          if old not in s:
+              raise SystemExit('diagnostic patch target not found')
+          p.write_text(s.replace(old,new,1))
+          PY
       - name: Ensure required Worker JWT secrets exist
         shell: bash
         run: |
