@@ -14,10 +14,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: cpagrip-isolated
+          ref: ${{ github.sha }}
+          fetch-depth: 1
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Verify exact revision
+        run: |
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          echo "Testing exact commit: ${GITHUB_SHA}"
       - name: Install worker dependencies
         run: npm install
         working-directory: worker
