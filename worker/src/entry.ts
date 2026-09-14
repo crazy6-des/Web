@@ -23,6 +23,74 @@ const testJson = (data: unknown, status = 200, headers: HeadersInit = {}) => {
   return new Response(JSON.stringify(data), { status, headers: h });
 };
 
+async function normalizeCpaLeadRecipient(env: any, req: Request) {
+  const path = new URL(req.url).pathname.replace(/\/+$/, '');
+  const callback = path === '/api/earn/postback/cpalead' || path === '/api/cpal_postback' || path === '/rewards/cpalead/postback';
+  if (!callback) return req;
+
+  let uid = '';
+  let password = '';
+  let bodyText = '';
+  if (req.method === 'GET') {
+    const url = new URL(req.url);
+    uid = String(url.searchParams.get('subid') || url.searchParams.get('sub_id') || url.searchParams.get('user_id') || '').trim();
+    password = String(url.searchParams.get('password') || '').trim();
+  } else if (req.method === 'POST') {
+    bodyText = await req.clone().text();
+    const contentType = req.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      try {
+        const b = JSON.parse(bodyText) as Record<string, unknown>;
+        uid = String(b.subid || b.sub_id || b.user_id || '').trim();
+        password = String(b.password || '').trim();
+      } catch {}
+    } else {
+      const b = new URLSearchParams(bodyText);
+      uid = String(b.get('subid') || b.get('sub_id') || b.get('user_id') || '').trim();
+      password = String(b.get('password') || '').trim();
+    }
+  }
+
+  // Only normalize after the provider credential is correct. This keeps recipient
+  // resolution from becoming a user-enumeration oracle for unauthenticated callbacks.
+  if (!uid || !env.CPALEAD_POSTBACK_PASSWORD || password !== String(env.CPALEAD_POSTBACK_PASSWORD)) return req;
+
+  try {
+    const columns = await env.DB.prepare('PRAGMA table_info("users")').all<Record<string, unknown>>();
+    const names = new Set((columns.results || []).map((x) => String(x.name || '')));
+    const idCol = ['id', 'user_id'].find((x) => names.has(x));
+    const emailCol = ['email', 'email_address'].find((x) => names.has(x));
+    const usernameCol = ['username', 'handle', 'name'].find((x) => names.has(x));
+    if (!idCol) return req;
+
+    const clauses = [`"${idCol}"=?`];
+    const args: unknown[] = [uid];
+    if (emailCol) { clauses.push(`lower("${emailCol}")=lower(?)`); args.push(uid); }
+    if (usernameCol) { clauses.push(`lower("${usernameCol}")=lower(?)`); args.push(uid); }
+    const row = await env.DB.prepare(`SELECT "${idCol}" AS id FROM users WHERE ${clauses.join(' OR ')} LIMIT 1`).bind(...args).first<{ id?: unknown }>();
+    const canonical = String(row?.id || '').trim();
+    if (!canonical || canonical === uid) return req;
+
+    if (req.method === 'GET') {
+      const url = new URL(req.url);
+      url.searchParams.set('subid', canonical);
+      return new Request(url.toString(), req);
+    }
+
+    const contentType = req.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      const b = JSON.parse(bodyText) as Record<string, unknown>;
+      b.subid = canonical;
+      return new Request(req.url, { method: req.method, headers: req.headers, body: JSON.stringify(b) });
+    }
+    const b = new URLSearchParams(bodyText);
+    b.set('subid', canonical);
+    return new Request(req.url, { method: req.method, headers: req.headers, body: b.toString() });
+  } catch {
+    return req;
+  }
+}
+
 async function handleTestAccount(env: any, req: Request) {
   const url = new URL(req.url);
   if (url.pathname !== '/__test/sphere-account') return null;
@@ -71,7 +139,7 @@ export default {
     if (testAccount) return testAccount;
     const offers = await handleOffers(env, req, (request, innerEnv) => base.fetch(request, innerEnv));
     if (offers) return offers;
-    const reward = await handleRewards(env, req, (request, innerEnv) => base.fetch(request, innerEnv));
+    const reward = await handleRewards(env, await normalizeCpaLeadRecipient(env, req), (request, innerEnv) => base.fetch(request, innerEnv));
     if (reward) return reward;
     return base.fetch(req, env);
   }
