@@ -1,6 +1,6 @@
 import base from './final';
 import { handleOffers } from './offers';
-import { handleRewards } from './rewards';
+import { handleRewards, type RewardEnv } from './rewards';
 
 const testCors = (env: any, req: Request) => {
   const h = new Headers();
@@ -23,7 +23,7 @@ const testJson = (data: unknown, status = 200, headers: HeadersInit = {}) => {
   return new Response(JSON.stringify(data), { status, headers: h });
 };
 
-async function normalizeCpaLeadRecipient(env: any, req: Request) {
+async function normalizeCpaLeadRecipient(env: RewardEnv, req: Request) {
   const path = new URL(req.url).pathname.replace(/\/+$/, '');
   const callback = path === '/api/earn/postback/cpalead' || path === '/api/cpal_postback' || path === '/rewards/cpalead/postback';
   if (!callback) return req;
@@ -57,7 +57,7 @@ async function normalizeCpaLeadRecipient(env: any, req: Request) {
 
   try {
     const columns = await env.DB.prepare('PRAGMA table_info("users")').all<Record<string, unknown>>();
-    const names = new Set((columns.results || []).map((x) => String(x.name || '')));
+    const names = new Set((columns.results || []).map((x: Record<string, unknown>) => String(x.name || '')));
     const idCol = ['id', 'user_id'].find((x) => names.has(x));
     const emailCol = ['email', 'email_address'].find((x) => names.has(x));
     const usernameCol = ['username', 'handle', 'name'].find((x) => names.has(x));
