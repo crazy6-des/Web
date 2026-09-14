@@ -10,6 +10,8 @@ CPAGRIP_PUBLISHER_ID = "2556168"
 CPAGRIP_OFFERWALL_URL = "https://quartzfiles.com/1912924"
 CPAGRIP_POSTBACK_SECRET = "cpagrip-isolated-test-secret"
 CPAGRIP_POSTBACK_MODE = "secret"
+JWT_SECRET = "cpagrip-isolated-test-jwt"
+JWT_REFRESH_SECRET = "cpagrip-isolated-test-refresh"
 
 [[d1_databases]]
 binding = "DB"
