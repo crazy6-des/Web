@@ -1,9 +1,8 @@
-export interface CpagripEnv {
-  FRONTEND_ORIGIN?: string;
-  FRONTEND_ORIGINS?: string;
+import type { RewardEnv } from './rewards';
+
+export interface CpagripEnv extends RewardEnv {
   CPAGRIP_OFFERWALL_URL?: string;
   CPAGRIP_PUBLISHER_ID?: string;
-  [key: string]: unknown;
 }
 
 type BaseFetch = (req: Request, env: CpagripEnv) => Promise<Response>;
