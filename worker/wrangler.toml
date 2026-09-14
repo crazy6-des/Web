@@ -1,6 +1,7 @@
 name = "sphere-api"
 main = "src/entry.ts"
 compatibility_date = "2026-09-09"
+keep_vars = true
 
 [vars]
 # Canonical production frontend origin. The www hostname redirects to this apex domain.
