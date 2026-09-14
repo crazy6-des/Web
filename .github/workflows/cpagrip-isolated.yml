@@ -1,0 +1,50 @@
+name: CPAGrip isolated validation
+
+on:
+  push:
+    branches: [cpagrip-isolated]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Verify exact revision
+        run: |
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          echo "Testing exact commit: ${GITHUB_SHA}"
+      - name: Install worker dependencies
+        run: npm install
+        working-directory: worker
+      - name: Typecheck worker
+        run: npm run check
+        working-directory: worker
+      - name: Seed local D1
+        run: npx wrangler@4 d1 execute sphere-cpagrip-isolated-test --local --file=test/cpagrip-isolated.sql --config=wrangler.cpagrip-test.toml
+        working-directory: worker
+      - name: Start isolated Worker
+        run: |
+          nohup npx wrangler@4 dev --local --config=wrangler.cpagrip-test.toml --ip 127.0.0.1 --port 8787 > /tmp/cpagrip-worker.log 2>&1 &
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:8787/api/earn/providers >/dev/null 2>&1; then exit 0; fi
+            sleep 2
+          done
+          cat /tmp/cpagrip-worker.log
+          exit 1
+        working-directory: worker
+      - name: Run CPAGrip callback suite
+        run: node scripts/cpagrip-isolated-test.mjs
+        working-directory: worker
+      - name: Dump isolated Worker log on failure
+        if: failure()
+        run: cat /tmp/cpagrip-worker.log || true
