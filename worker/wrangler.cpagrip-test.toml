@@ -6,6 +6,8 @@ compatibility_date = "2026-09-09"
 FRONTEND_ORIGIN = "http://127.0.0.1:8787"
 FRONTEND_ORIGINS = "http://127.0.0.1:8787"
 REWARD_USER_SHARE_PERCENT = "75"
+CPAGRIP_PUBLISHER_ID = "2556168"
+CPAGRIP_OFFERWALL_URL = "https://quartzfiles.com/1912924"
 CPAGRIP_POSTBACK_SECRET = "cpagrip-isolated-test-secret"
 CPAGRIP_POSTBACK_MODE = "secret"
 
