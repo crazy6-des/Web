@@ -1,6 +1,7 @@
 import { StrictMode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './styles.css';
+import './messages-notifications.css';
 import SphereFinish from './SphereFinish';
 import Landing from './Landing';
 import { api, User } from './api';
