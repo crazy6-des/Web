@@ -8,32 +8,28 @@ permissions:
   contents: write
 
 jobs:
-  fix:
+  validate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Align external offer ID handling
-        shell: bash
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Typecheck worker
         run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
-          p=Path('worker/src/rewards.ts')
-          s=p.read_text()
-          old="user_id:userId,offer_id:offerId,offerwall_event_id:offerEventId,event_id:eventId,provider,type:'credit'"
-          new="user_id:userId,offer_id:provider==='cpagrip'?undefined:offerId,offerwall_event_id:offerEventId,event_id:eventId,provider,type:'credit'"
-          if old not in s:
-              raise SystemExit('reward_transactions pattern not found')
-          s=s.replace(old,new,1)
-          old="provider,provider_name:provider,event_type:'offerwall',user_id:userId,offer_id:offerId,status:'APPROVED'"
-          new="provider,provider_name:provider,event_type:'offerwall',user_id:userId,offer_id:provider==='cpagrip'?undefined:offerId,status:'APPROVED'"
-          if old not in s:
-              raise SystemExit('offerwall_events pattern not found')
-          s=s.replace(old,new,1)
-          p.write_text(s)
-          PY
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add worker/src/rewards.ts
-          git commit -m 'Align CPAGrip external offer ID with reward schema'
-          git push origin HEAD:cpagrip-fk-alignment
+          npm install
+          npm run check
+        working-directory: worker
+      - name: Run isolated CPAGrip regression
+        run: |
+          npx wrangler@4 d1 execute sphere-cpagrip-isolated-test --local --file=test/cpagrip-isolated.sql --config=wrangler.cpagrip-test.toml
+          nohup npx wrangler@4 dev --local --config=wrangler.cpagrip-test.toml --ip 127.0.0.1 --port 8787 > /tmp/cpagrip-worker.log 2>&1 &
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:8787/api/earn/providers >/dev/null 2>&1; then break; fi
+            sleep 2
+          done
+          node scripts/cpagrip-isolated-test.mjs
+        working-directory: worker
+      - name: Dump log on failure
+        if: failure()
+        run: cat /tmp/cpagrip-worker.log || true
