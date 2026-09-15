@@ -1,0 +1,39 @@
+name: cpagrip fk fix
+
+on:
+  push:
+    branches: [cpagrip-fk-alignment]
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Align external offer ID handling
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('worker/src/rewards.ts')
+          s=p.read_text()
+          old="user_id:userId,offer_id:offerId,offerwall_event_id:offerEventId,event_id:eventId,provider,type:'credit'"
+          new="user_id:userId,offer_id:provider==='cpagrip'?undefined:offerId,offerwall_event_id:offerEventId,event_id:eventId,provider,type:'credit'"
+          if old not in s:
+              raise SystemExit('reward_transactions pattern not found')
+          s=s.replace(old,new,1)
+          old="provider,provider_name:provider,event_type:'offerwall',user_id:userId,offer_id:offerId,status:'APPROVED'"
+          new="provider,provider_name:provider,event_type:'offerwall',user_id:userId,offer_id:provider==='cpagrip'?undefined:offerId,status:'APPROVED'"
+          if old not in s:
+              raise SystemExit('offerwall_events pattern not found')
+          s=s.replace(old,new,1)
+          p.write_text(s)
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add worker/src/rewards.ts
+          git commit -m 'Align CPAGrip external offer ID with reward schema'
+          git push origin HEAD:cpagrip-fk-alignment
