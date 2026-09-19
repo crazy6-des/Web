@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CPAGrip Offers</title>
+  <style>body{margin:0;background:#0b0b0f;color:#f4f4f5;font-family:system-ui,sans-serif;padding:20px}main{max-width:720px;margin:auto}p{color:#a1a1aa}</style>
+</head>
+<body>
+  <main>
+    <h1>Available offers</h1>
+    <p>Loading eligible offers…</p>
+    <div id="cpagrip-offers"></div>
+  </main>
+  <script>
+    (function () {
+      var trackingId = new URLSearchParams(location.search).get('tracking_id') || '';
+      var script = document.createElement('script');
+      script.src = 'https://quartzfiles.com/script_include.php?id=1915119' + (trackingId ? '&tracking_id=' + encodeURIComponent(trackingId) : '');
+      script.async = true;
+      document.body.appendChild(script);
+    }());
+  </script>
+</body>
+</html>
