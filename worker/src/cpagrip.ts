@@ -3,6 +3,7 @@ import type { RewardEnv } from './rewards';
 export interface CpagripEnv extends RewardEnv {
   CPAGRIP_OFFERWALL_URL?: string;
   CPAGRIP_PUBLISHER_ID?: string;
+  FRONTEND_ORIGIN?: string;
 }
 
 type BaseFetch = (req: Request, env: CpagripEnv) => Promise<Response>;
@@ -43,6 +44,26 @@ export function buildCpagripOfferwallUrl(baseUrl: string, trackingId: string) {
   return url.toString();
 }
 
+function isScriptInclude(url: string) {
+  try {
+    return new URL(url).pathname.endsWith('/script_include.php');
+  } catch {
+    return false;
+  }
+}
+
+function buildScriptWrapperUrl(env: CpagripEnv, req: Request, trackingId: string) {
+  const origin = text(env.FRONTEND_ORIGIN).split(',')[0].trim();
+  if (!origin) return null;
+  try {
+    const wrapper = new URL('/cpagrip.html', origin);
+    wrapper.searchParams.set('tracking_id', trackingId);
+    return wrapper.toString();
+  } catch {
+    return null;
+  }
+}
+
 export async function handleCpagripOfferwall(env: CpagripEnv, req: Request, base: BaseFetch) {
   const path = new URL(req.url).pathname.replace(/\/+$/, '') || '/';
   if (path !== '/api/earn/cpagrip/offerwall') return null;
@@ -63,13 +84,17 @@ export async function handleCpagripOfferwall(env: CpagripEnv, req: Request, base
   const userId = await currentUserId(env, req, base);
   if (!userId) return json({ success: false, error: 'Authentication required' }, 401, headers);
 
+  const wrapperUrl = isScriptInclude(baseUrl) ? buildScriptWrapperUrl(env, req, userId) : null;
+  const destinationUrl = wrapperUrl || buildCpagripOfferwallUrl(baseUrl, userId);
+
   return json({
     success: true,
     data: {
       provider: 'cpagrip',
       publisherId: text(env.CPAGRIP_PUBLISHER_ID) || null,
       trackingId: userId,
-      url: buildCpagripOfferwallUrl(baseUrl, userId),
+      url: destinationUrl,
+      mode: wrapperUrl ? 'script-wrapper' : 'redirect',
     },
   }, 200, headers);
 }
